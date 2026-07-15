@@ -31,6 +31,7 @@ def gate_candidate(findings: tuple[Finding, ...]) -> GateDecision:
 
     if any(finding.kind in BLOCKING_KINDS or finding.severity == "high" for finding in findings):
         return GateDecision("blocked_candidate", findings)
-    if findings:
+    actionable_findings = tuple(finding for finding in findings if finding.kind != "secret_scan_scope")
+    if actionable_findings:
         return GateDecision("needs_review", findings)
-    return GateDecision("approved_candidate", ())
+    return GateDecision("approved_candidate", findings)

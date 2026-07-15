@@ -79,15 +79,17 @@ def audit_candidate(
             verified_packet,
             require_claimed=active_config.require_claimed_evidence,
             require_verified=active_config.require_verified_evidence,
+            worker_identity=_worker_identity(guarded_output, envelope),
         )
     )
 
     decision = gate_candidate(tuple(findings))
+    has_secret_redaction = any(finding.kind != "secret_scan_scope" for finding in guard_findings)
     result = AuditResult(
         status=decision.status,
         output=guarded_output,
         findings=tuple(findings),
-        redacted_content=guarded_output.content if guard_findings else None,
+        redacted_content=guarded_output.content if has_secret_redaction else None,
     )
     if review_callback is not None and not result.eligible_for_release:
         review_callback(result)
@@ -139,6 +141,7 @@ def run_guarded_task(
         output,
         config=active_config,
         verified_evidence=verified_evidence,
+        envelope=envelope,
         custom_guards=(),
         review_callback=review_callback,
     )
@@ -168,6 +171,7 @@ async def run_guarded_task_async(
         output,
         config=active_config,
         verified_evidence=verified_evidence,
+        envelope=envelope,
         custom_guards=(),
         review_callback=review_callback,
     )
@@ -180,6 +184,19 @@ def _coerce_evidence(value: Mapping[str, Any] | EvidencePacket | None) -> Eviden
     if isinstance(value, EvidencePacket):
         return value
     return EvidencePacket.from_mapping(value)
+
+
+def _worker_identity(output: CandidateOutput, envelope: Mapping[str, Any] | None) -> str | None:
+    trusted_envelope = envelope or {}
+    for key in ("worker_id", "worker", "agent_id"):
+        value = trusted_envelope.get(key)
+        if value:
+            return str(value)
+    for key in ("worker_id", "worker", "agent_id"):
+        value = output.metadata.get(key)
+        if value:
+            return str(value)
+    return None
 
 
 def _with_verifier(

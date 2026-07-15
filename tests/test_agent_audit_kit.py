@@ -90,7 +90,23 @@ def test_verified_evidence_allows_eligible_candidate_when_clean():
 
     assert result.status == "approved_candidate"
     assert result.eligible_for_release
-    assert result.findings == ()
+    assert [finding.kind for finding in result.findings] == ["secret_scan_scope"]
+    assert result.findings[0].severity == "info"
+    assert result.redacted_content is None
+
+
+def test_secret_scan_scope_note_is_present_on_clean_pass_without_blocking():
+    output = CandidateOutput(
+        content="No synthetic secrets here.",
+        evidence={"sources": ["worker-log"], "checks_run": ["claimed-pytest"]},
+    )
+
+    result = audit_candidate(output, verified_evidence=VERIFIED)
+
+    assert result.status == "approved_candidate"
+    assert result.eligible_for_release
+    assert any(finding.kind == "secret_scan_scope" for finding in result.findings)
+    assert not any(finding.kind == "openai_api_key" for finding in result.findings)
 
 
 def test_secret_like_output_is_redacted_and_blocked_even_with_verified_evidence():
@@ -118,6 +134,62 @@ def test_missing_verified_evidence_is_not_approved():
 
     assert result.status == "needs_review"
     assert not result.passed
+
+
+def test_verified_evidence_without_artifact_needs_review():
+    output = CandidateOutput(
+        content="The task appears complete.",
+        evidence={"sources": ["worker"], "checks_run": ["claimed-check"]},
+    )
+    verified = {
+        "sources": ["review-note"],
+        "checks_run": ["manual-review"],
+        "verifier": "human-reviewer",
+    }
+
+    result = audit_candidate(output, verified_evidence=verified)
+
+    assert result.status == "needs_review"
+    assert not result.eligible_for_release
+    assert any(finding.kind == "verifier_artifact_missing" for finding in result.findings)
+
+
+def test_verified_evidence_without_verifier_needs_review():
+    output = CandidateOutput(
+        content="The task appears complete.",
+        evidence={"sources": ["worker"], "checks_run": ["claimed-check"]},
+    )
+    verified = {
+        "sources": ["ci-log"],
+        "checks_run": ["pytest"],
+        "artifacts": ["ci/pytest.log"],
+    }
+
+    result = audit_candidate(output, verified_evidence=verified)
+
+    assert result.status == "needs_review"
+    assert not result.eligible_for_release
+    assert any(finding.kind == "verifier_missing" for finding in result.findings)
+
+
+def test_self_verification_needs_review_when_worker_identity_matches():
+    output = CandidateOutput(
+        content="Worker says tests passed.",
+        evidence={"sources": ["worker-log"], "checks_run": ["claimed-pytest"]},
+        metadata={"worker_id": "repo-worker"},
+    )
+    verified = {
+        "sources": ["worker-log"],
+        "checks_run": ["pytest"],
+        "artifacts": ["logs/pytest.log"],
+        "verifier": "repo-worker",
+    }
+
+    result = audit_candidate(output, verified_evidence=verified)
+
+    assert result.status == "needs_review"
+    assert not result.eligible_for_release
+    assert any(finding.kind == "self_verification" for finding in result.findings)
 
 
 def test_missing_claimed_evidence_needs_review_even_with_verified_evidence():
@@ -256,3 +328,110 @@ def test_run_guarded_task_runs_worker_after_allowed_preflight():
     assert called == [True]
     assert result.worker_ran
     assert result.eligible_for_release
+
+
+def test_envelope_identity_overrides_spoofed_candidate_metadata():
+    output = CandidateOutput(
+        content="Worker says tests passed.",
+        evidence={"sources": ["worker-log"], "checks_run": ["claimed-pytest"]},
+        metadata={"worker_id": "spoofed-worker"},
+    )
+    verified = {
+        "sources": ["worker-log"],
+        "checks_run": ["pytest"],
+        "artifacts": ["logs/pytest.log"],
+        "verifier": "trusted-worker",
+    }
+
+    result = audit_candidate(
+        output,
+        verified_evidence=verified,
+        envelope={"worker_id": "trusted-worker"},
+    )
+
+    assert result.status == "needs_review"
+    assert any(finding.kind == "self_verification" for finding in result.findings)
+
+
+def test_run_guarded_task_catches_self_verification_from_envelope_identity():
+    envelope = {**_allowed_envelope(), "worker_id": "trusted-worker"}
+
+    def worker(_envelope):
+        return CandidateOutput(
+            content="Worker output.",
+            evidence={"sources": ["worker"], "checks_run": ["claimed-check"]},
+        )
+
+    verified = {
+        "sources": ["worker-log"],
+        "checks_run": ["pytest"],
+        "artifacts": ["logs/pytest.log"],
+        "verifier": "trusted-worker",
+    }
+
+    result = run_guarded_task(envelope, _policy(), worker, verified_evidence=verified)
+
+    assert result.worker_ran
+    assert result.status == "needs_review"
+    assert result.audit is not None
+    assert any(finding.kind == "self_verification" for finding in result.audit.findings)
+
+
+def test_run_guarded_task_async_catches_self_verification_from_envelope_identity():
+    envelope = {**_allowed_envelope(), "worker_id": "trusted-worker"}
+
+    async def worker(_envelope):
+        return CandidateOutput(
+            content="Worker output.",
+            evidence={"sources": ["worker"], "checks_run": ["claimed-check"]},
+        )
+
+    verified = {
+        "sources": ["worker-log"],
+        "checks_run": ["pytest"],
+        "artifacts": ["logs/pytest.log"],
+        "verifier": "trusted-worker",
+    }
+
+    async def run():
+        return await run_guarded_task_async(envelope, _policy(), worker, verified_evidence=verified)
+
+    result = asyncio.run(run())
+
+    assert result.worker_ran
+    assert result.status == "needs_review"
+    assert result.audit is not None
+    assert any(finding.kind == "self_verification" for finding in result.audit.findings)
+
+
+def test_blocking_kind_with_info_severity_still_blocks():
+    def bad_guard(_output):
+        return Finding(
+            kind="openai_api_key",
+            message="Blocking kind must remain blocking regardless of severity.",
+            severity="info",
+        )
+
+    result = audit_candidate(
+        CandidateOutput(
+            content="No synthetic secrets here.",
+            evidence={"sources": ["unit-test"], "checks_run": ["custom-guard"]},
+        ),
+        verified_evidence=VERIFIED,
+        custom_guards=(bad_guard,),
+    )
+
+    assert result.status == "blocked_candidate"
+
+
+def test_secret_scan_scope_is_the_only_non_actionable_info_finding():
+    result = audit_candidate(
+        CandidateOutput(
+            content="No synthetic secrets here.",
+            evidence={"sources": ["unit-test"], "checks_run": ["secret-scan"]},
+        ),
+        verified_evidence=VERIFIED,
+    )
+
+    assert result.status == "approved_candidate"
+    assert [finding.kind for finding in result.findings] == ["secret_scan_scope"]

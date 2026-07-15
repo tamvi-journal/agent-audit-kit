@@ -47,10 +47,32 @@ class SecretScan:
     def has_findings(self) -> bool:
         return bool(self.findings)
 
+    @property
+    def has_secret_findings(self) -> bool:
+        return any(finding.kind != "secret_scan_scope" for finding in self.findings)
+
 
 def scan_text(text: str | None, *, source: str = "candidate_output") -> SecretScan:
+    """Run a pattern-limited secret scan.
+
+    This catches known token/key formats only. A clean result is not a guarantee
+    that no secret exists, and it does not replace secret managers, pre-commit
+    scanners, or repository-history cleanup.
+    """
+
     value = text or ""
-    findings: list[Finding] = []
+    findings: list[Finding] = [
+        Finding(
+            kind="secret_scan_scope",
+            message=(
+                "Pattern-based secret scan only checks known key formats; "
+                "a pass is not a guarantee that no secret exists."
+            ),
+            source=source,
+            severity="info",
+            details={"pattern_count": len(SECRET_PATTERNS)},
+        )
+    ]
     redacted = value
 
     for kind, pattern, redaction in SECRET_PATTERNS:

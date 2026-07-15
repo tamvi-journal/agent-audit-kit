@@ -31,6 +31,14 @@ result = audit_candidate(candidate, config=config)
 
 Use a verifier when evidence comes from outside the worker, such as a log, test result, artifact, or human review.
 
+A verifier must be one of:
+
+- a deterministic check, such as CI, pytest, hash comparison, or a diff against a source file;
+- a human reviewer;
+- an independent system whose output is an inspectable artifact.
+
+An LLM restating that an answer "looks correct" is not verification. If an LLM is involved, it must be a different principal than the worker and must attach a machine-checkable artifact such as a diff, test log, or review record, not just free-text judgment.
+
 ```python
 def verifier(candidate):
     return {
@@ -45,7 +53,7 @@ config = AuditConfig(verifier=verifier)
 result = audit_candidate(candidate, config=config)
 ```
 
-Worker-reported evidence is a claim, not proof. A verifier should be controlled by the caller, not by the worker being audited.
+Worker-reported evidence is a claim, not proof. A verifier should be controlled by the caller, not by the worker being audited. Verified evidence needs both a verifier identity and at least one inspectable artifact to become eligible for release.
 
 ## Review Callback
 

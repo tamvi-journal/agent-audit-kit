@@ -8,6 +8,7 @@
 
 Agent Audit Kit is a small, practical safety layer for AI agents, vibe-coded workers, and automation scripts. It separates pre-execution permission checks from post-execution output audit, so an agent result stays a **candidate** until it passes the configured gate.
 
+
 > Worker-reported evidence is a claim, not proof.
 
 > `approved_candidate` means approved under the configured checks; not proven true.
@@ -147,6 +148,8 @@ print(result.eligible_for_release)
 # True
 ```
 
+Verified evidence must come from a deterministic check, a human reviewer, or an independent system that leaves an inspectable artifact. An LLM saying "looks correct" is not verification. If an LLM participates, it must be a different principal than the worker and attach a machine-checkable artifact such as a diff, test log, or review record.
+
 ## Configuration and Custom Guards
 
 Use `AuditConfig` and custom guards when your agent has domain-specific rules.
@@ -214,8 +217,12 @@ print(result.status)
 # blocked_candidate
 
 print(result.output.content)
-# OPENAI_API_KEY=[REDACTED_OPENAI_API_KEY]
+# OPENAI_API_KEY=<redacted>
 ```
+
+Secret scanning is pattern-based: it catches known key formats only, and a pass is not a guarantee that no secret exists. It does not replace secret managers, pre-commit scanners, or repository-history cleanup.
+
+Redaction in the candidate output does not un-leak anything already written to logs, disk, screenshots, or git history.
 
 ## What It Checks
 
