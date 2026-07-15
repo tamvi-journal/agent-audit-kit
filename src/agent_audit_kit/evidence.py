@@ -38,6 +38,7 @@ def verify_evidence_packet(
     *,
     require_claimed: bool = True,
     require_verified: bool = True,
+    worker_identity: str | None = None,
 ) -> tuple[Finding, ...]:
     """Check claimed evidence separately from independently verified evidence."""
 
@@ -74,11 +75,25 @@ def verify_evidence_packet(
         findings.append(Finding("missing_verified_sources", "Verified evidence has no external source reference"))
     if not verified.checks_run:
         findings.append(Finding("missing_verified_checks", "Verified evidence has no confirmed checks"))
-    if not (verified.artifacts or verified.verifier):
+    if not verified.artifacts:
         findings.append(
             Finding(
-                "missing_verified_artifact_or_verifier",
-                "Verified evidence needs an artifact, log, test result, or verifier identity.",
+                "verifier_artifact_missing",
+                "Verified evidence needs an inspectable artifact, log, test result, diff, or review record.",
+            )
+        )
+    if not verified.verifier:
+        findings.append(
+            Finding(
+                "verifier_missing",
+                "Verified evidence needs a verifier identity controlled outside the worker.",
+            )
+        )
+    if worker_identity and verified.verifier and verified.verifier == worker_identity:
+        findings.append(
+            Finding(
+                "self_verification",
+                "The verifier identity matches the worker identity; workers cannot verify their own output.",
             )
         )
 

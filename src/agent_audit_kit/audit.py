@@ -79,15 +79,17 @@ def audit_candidate(
             verified_packet,
             require_claimed=active_config.require_claimed_evidence,
             require_verified=active_config.require_verified_evidence,
+            worker_identity=_worker_identity(guarded_output, envelope),
         )
     )
 
     decision = gate_candidate(tuple(findings))
+    has_secret_redaction = any(finding.kind != "secret_scan_scope" for finding in guard_findings)
     result = AuditResult(
         status=decision.status,
         output=guarded_output,
         findings=tuple(findings),
-        redacted_content=guarded_output.content if guard_findings else None,
+        redacted_content=guarded_output.content if has_secret_redaction else None,
     )
     if review_callback is not None and not result.eligible_for_release:
         review_callback(result)
@@ -180,6 +182,15 @@ def _coerce_evidence(value: Mapping[str, Any] | EvidencePacket | None) -> Eviden
     if isinstance(value, EvidencePacket):
         return value
     return EvidencePacket.from_mapping(value)
+
+
+def _worker_identity(output: CandidateOutput, envelope: Mapping[str, Any] | None) -> str | None:
+    for source in (output.metadata, envelope or {}):
+        for key in ("worker_id", "worker", "agent_id"):
+            value = source.get(key)
+            if value:
+                return str(value)
+    return None
 
 
 def _with_verifier(
