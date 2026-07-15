@@ -1,16 +1,106 @@
 import asyncio
 
-from agent_audit_kit import AuditConfig, CandidateOutput, Finding, PreflightPolicy, audit_candidate, audit_candidate_async, redact_text
+from agent_audit_kit import (
+    AuditConfig,
+    CandidateOutput,
+    Finding,
+    PreflightPolicy,
+    audit_candidate,
+    audit_candidate_async,
+    preflight_task,
+    redact_text,
+    run_guarded_task,
+    run_guarded_task_async,
+)
 
 
-def test_secret_like_output_is_redacted_and_blocked():
+VERIFIED = {
+    "sources": ["unit-test-log"],
+    "checks_run": ["pytest"],
+    "artifacts": ["pytest-output"],
+    "verifier": "unit-test",
+}
+
+
+def _policy() -> PreflightPolicy:
+    return PreflightPolicy(
+        allowed_tools=("filesystem_read",),
+        forbidden_tools=("network",),
+        allowed_actions=("draft_response",),
+        blocked_actions=("read_secret", "print_secret"),
+    )
+
+
+def _allowed_envelope():
+    return {
+        "requested_tools": ["filesystem_read"],
+        "requested_actions": ["draft_response"],
+        "network_access": False,
+    }
+
+
+def test_blocked_preflight_does_not_call_worker_callback():
+    called = []
+
+    def worker(_envelope):
+        called.append(True)
+        return CandidateOutput(content="should not run")
+
+    result = run_guarded_task(
+        {"requested_tools": ["network"], "requested_actions": ["draft_response"]},
+        _policy(),
+        worker,
+        verified_evidence=VERIFIED,
+    )
+
+    assert result.status == "blocked"
+    assert result.preflight.blocked
+    assert not result.worker_ran
+    assert called == []
+
+
+def test_preflight_task_exposes_can_execute_and_status():
+    result = preflight_task(_allowed_envelope(), _policy())
+
+    assert result.status == "allowed"
+    assert result.can_execute
+    assert result.findings == ()
+
+
+def test_claimed_evidence_without_verified_evidence_needs_review():
+    output = CandidateOutput(
+        content="Worker says tests passed.",
+        evidence={"sources": ["worker-log"], "checks_run": ["claimed-pytest"]},
+    )
+
+    result = audit_candidate(output)
+
+    assert result.status == "needs_review"
+    assert not result.eligible_for_release
+    assert any(finding.kind == "missing_verified_evidence" for finding in result.findings)
+
+
+def test_verified_evidence_allows_eligible_candidate_when_clean():
+    output = CandidateOutput(
+        content="Created the requested draft and ran unit tests.",
+        evidence={"sources": ["worker-log"], "checks_run": ["claimed-pytest"]},
+    )
+
+    result = audit_candidate(output, verified_evidence=VERIFIED)
+
+    assert result.status == "approved_candidate"
+    assert result.eligible_for_release
+    assert result.findings == ()
+
+
+def test_secret_like_output_is_redacted_and_blocked_even_with_verified_evidence():
     fake_key = "sk-proj-" + "abcdefghijklmnopqrstuvwxyz1234567890"
     output = CandidateOutput(
         content="OPENAI_API_KEY=" + fake_key,
         evidence={"sources": ["unit-test"], "checks_run": ["secret-scan"]},
     )
 
-    result = audit_candidate(output)
+    result = audit_candidate(output, verified_evidence=VERIFIED)
 
     assert result.status == "blocked_candidate"
     assert fake_key not in result.output.content
@@ -18,45 +108,27 @@ def test_secret_like_output_is_redacted_and_blocked():
     assert any(finding.kind == "openai_api_key" for finding in result.findings)
 
 
-def test_missing_evidence_needs_review():
-    output = CandidateOutput(content="The task appears complete.")
+def test_missing_verified_evidence_is_not_approved():
+    output = CandidateOutput(
+        content="The task appears complete.",
+        evidence={"sources": ["worker"], "checks_run": ["claimed-check"]},
+    )
 
     result = audit_candidate(output)
 
     assert result.status == "needs_review"
-    assert {finding.kind for finding in result.findings} == {"missing_sources", "missing_checks"}
+    assert not result.passed
 
 
-def test_preflight_blocks_forbidden_tool():
-    output = CandidateOutput(
-        content="I searched the web.",
-        evidence={"sources": ["unit-test"], "checks_run": ["policy-check"]},
+def test_missing_claimed_evidence_needs_review_even_with_verified_evidence():
+    output = CandidateOutput(content="The task appears complete.")
+
+    result = audit_candidate(output, verified_evidence=VERIFIED)
+
+    assert result.status == "needs_review"
+    assert {"missing_claimed_sources", "missing_claimed_checks"}.issubset(
+        {finding.kind for finding in result.findings}
     )
-    policy = PreflightPolicy(
-        allowed_tools=("filesystem_read",),
-        forbidden_tools=("network",),
-    )
-
-    result = audit_candidate(
-        output,
-        envelope={"requested_tools": ["network"], "requested_actions": []},
-        policy=policy,
-    )
-
-    assert result.status == "blocked_candidate"
-    assert any(finding.kind == "forbidden_tool" for finding in result.findings)
-
-
-def test_safe_candidate_can_pass():
-    output = CandidateOutput(
-        content="Created the requested draft and ran unit tests.",
-        evidence={"sources": ["local-test-log"], "checks_run": ["pytest"]},
-    )
-
-    result = audit_candidate(output)
-
-    assert result.passed
-    assert result.findings == ()
 
 
 def test_redact_text_does_not_return_database_url():
@@ -74,7 +146,7 @@ def test_secret_finding_includes_explainable_location_details():
         evidence={"sources": ["unit-test"], "checks_run": ["secret-scan"]},
     )
 
-    result = audit_candidate(output)
+    result = audit_candidate(output, verified_evidence=VERIFIED)
     finding = next(item for item in result.findings if item.kind == "openai_api_key")
 
     assert finding.details["line"] == 2
@@ -97,6 +169,7 @@ def test_custom_guard_can_mark_output_for_review():
             content="This is definitely complete.",
             evidence={"sources": ["unit-test"], "checks_run": ["custom-guard"]},
         ),
+        verified_evidence=VERIFIED,
         custom_guards=(no_completion_claims,),
     )
 
@@ -104,10 +177,13 @@ def test_custom_guard_can_mark_output_for_review():
     assert any(finding.kind == "overconfident_completion_claim" for finding in result.findings)
 
 
-def test_config_can_disable_evidence_requirement_for_lightweight_use():
+def test_config_can_disable_verified_evidence_requirement_for_lightweight_use():
     result = audit_candidate(
-        CandidateOutput(content="Draft only, no evidence required."),
-        config=AuditConfig(require_evidence=False),
+        CandidateOutput(
+            content="Draft only, verified evidence disabled.",
+            evidence={"sources": ["caller"], "checks_run": ["manual"]},
+        ),
+        config=AuditConfig(require_verified_evidence=False),
     )
 
     assert result.status == "approved_candidate"
@@ -127,15 +203,56 @@ def test_review_callback_receives_non_passing_result():
     assert reviewed == ["needs_review"]
 
 
-def test_async_audit_candidate_matches_sync_api():
+def test_async_api_keeps_sync_semantics_for_verified_evidence():
     async def run():
         return await audit_candidate_async(
             CandidateOutput(
                 content="Async candidate.",
                 evidence={"sources": ["unit-test"], "checks_run": ["async-audit"]},
-            )
+            ),
+            verified_evidence=VERIFIED,
         )
 
     result = asyncio.run(run())
 
     assert result.status == "approved_candidate"
+    assert result.eligible_for_release
+
+
+def test_async_guarded_task_does_not_call_worker_when_preflight_blocks():
+    called = []
+
+    async def worker(_envelope):
+        called.append(True)
+        return CandidateOutput(content="should not run")
+
+    async def run():
+        return await run_guarded_task_async(
+            {"requested_tools": ["network"], "requested_actions": ["draft_response"]},
+            _policy(),
+            worker,
+            verified_evidence=VERIFIED,
+        )
+
+    result = asyncio.run(run())
+
+    assert result.status == "blocked"
+    assert not result.worker_ran
+    assert called == []
+
+
+def test_run_guarded_task_runs_worker_after_allowed_preflight():
+    called = []
+
+    def worker(_envelope):
+        called.append(True)
+        return CandidateOutput(
+            content="Worker output.",
+            evidence={"sources": ["worker"], "checks_run": ["claimed-check"]},
+        )
+
+    result = run_guarded_task(_allowed_envelope(), _policy(), worker, verified_evidence=VERIFIED)
+
+    assert called == [True]
+    assert result.worker_ran
+    assert result.eligible_for_release
