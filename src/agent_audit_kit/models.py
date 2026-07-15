@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from collections.abc import Callable, Iterable
+from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 
@@ -33,18 +33,25 @@ class CandidateOutput:
 
 
 CustomGuard = Callable[[CandidateOutput], Finding | Iterable[Finding] | None]
+EvidenceVerifier = Callable[[CandidateOutput], Mapping[str, Any] | None]
 
 
 @dataclass(frozen=True)
-class AuditResult:
+class PreflightResult:
     status: str
-    output: CandidateOutput
     findings: tuple[Finding, ...] = ()
-    redacted_content: str | None = None
 
     @property
-    def passed(self) -> bool:
-        return self.status == "approved_candidate"
+    def can_execute(self) -> bool:
+        return self.status == "allowed"
+
+    @property
+    def blocked(self) -> bool:
+        return self.status == "blocked"
+
+    @property
+    def needs_approval(self) -> bool:
+        return self.status == "needs_approval"
 
     @property
     def explanations(self) -> tuple[str, ...]:
@@ -55,7 +62,50 @@ class AuditResult:
 
 
 @dataclass(frozen=True)
+class AuditResult:
+    status: str
+    output: CandidateOutput
+    findings: tuple[Finding, ...] = ()
+    redacted_content: str | None = None
+
+    @property
+    def eligible_for_release(self) -> bool:
+        return self.status == "approved_candidate"
+
+    @property
+    def passed(self) -> bool:
+        return self.eligible_for_release
+
+    @property
+    def explanations(self) -> tuple[str, ...]:
+        return tuple(
+            f"{finding.severity}: {finding.kind} - {finding.message}"
+            for finding in self.findings
+        )
+
+
+@dataclass(frozen=True)
+class GuardedTaskResult:
+    status: str
+    preflight: PreflightResult
+    audit: AuditResult | None = None
+    worker_ran: bool = False
+
+    @property
+    def eligible_for_release(self) -> bool:
+        return bool(self.audit and self.audit.eligible_for_release)
+
+    @property
+    def explanations(self) -> tuple[str, ...]:
+        if self.audit is None:
+            return self.preflight.explanations
+        return (*self.preflight.explanations, *self.audit.explanations)
+
+
+@dataclass(frozen=True)
 class AuditConfig:
     policy: PreflightPolicy | None = None
     custom_guards: tuple[CustomGuard, ...] = ()
-    require_evidence: bool = True
+    verifier: EvidenceVerifier | None = None
+    require_claimed_evidence: bool = True
+    require_verified_evidence: bool = True

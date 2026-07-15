@@ -6,9 +6,9 @@ It includes:
 
 - Candidate output audit patterns.
 - Secret scanning and redaction.
-- Evidence packet checks.
-- Preflight policy checks.
-- A simple final gate.
+- Claimed-vs-verified evidence checks.
+- Pre-execution preflight policy checks.
+- A simple release gate.
 
 It does not include:
 

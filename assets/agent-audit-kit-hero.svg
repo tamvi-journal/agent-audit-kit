@@ -1,10 +1,10 @@
 <svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
-  <title id="title">Agent Audit Kit pipeline</title>
-  <desc id="desc">A professional pipeline visual showing agent output moving through preflight, guard, evidence, verification, and gate before becoming an approved candidate.</desc>
+  <title id="title">Agent Audit Kit trust-boundary pipeline</title>
+  <desc id="desc">A task passes through preflight, worker execution, guard, evidence verification, and release gate before becoming an approved candidate.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="630" gradientUnits="userSpaceOnUse">
       <stop stop-color="#101820"/>
-      <stop offset="0.52" stop-color="#183B3D"/>
+      <stop offset="0.55" stop-color="#183B3D"/>
       <stop offset="1" stop-color="#F2B84B"/>
     </linearGradient>
     <linearGradient id="panel" x1="84" y1="80" x2="1116" y2="550" gradientUnits="userSpaceOnUse">
@@ -21,61 +21,55 @@
   <path d="M0 120C143 162 260 135 394 100C559 57 742 38 923 76C1054 104 1139 154 1200 182V0H0V120Z" fill="#0B1418" fill-opacity="0.18"/>
 
   <g filter="url(#softShadow)">
-    <rect x="84" y="80" width="1032" height="470" rx="28" fill="url(#panel)"/>
+    <rect x="70" y="78" width="1060" height="474" rx="28" fill="url(#panel)"/>
   </g>
 
-  <text x="136" y="158" fill="#0F172A" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="54" font-weight="800" letter-spacing="0">Agent Audit Kit</text>
-  <text x="138" y="202" fill="#334155" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="24" font-weight="500">Stop trusting agent output. Start auditing it.</text>
+  <text x="122" y="150" fill="#0F172A" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="52" font-weight="800" letter-spacing="0">Agent Audit Kit</text>
+  <text x="124" y="194" fill="#334155" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="23" font-weight="500">Preflight before execution. Evidence verified before release.</text>
 
-  <g transform="translate(137 274)">
-    <rect x="0" y="0" width="156" height="86" rx="16" fill="#FFFFFF" stroke="#CBD5E1"/>
-    <text x="78" y="37" text-anchor="middle" fill="#0F172A" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="18" font-weight="800">Worker</text>
-    <text x="78" y="62" text-anchor="middle" fill="#64748B" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="14">raw output</text>
-  </g>
-
-  <g transform="translate(340 252)">
-    <rect x="0" y="0" width="128" height="128" rx="20" fill="#113C47"/>
-    <text x="64" y="48" text-anchor="middle" fill="#FFFFFF" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="17" font-weight="800">Preflight</text>
-    <text x="64" y="75" text-anchor="middle" fill="#BFE7E2" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="13">policy</text>
-    <text x="64" y="94" text-anchor="middle" fill="#BFE7E2" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="13">scope</text>
-  </g>
-
-  <g transform="translate(502 252)">
-    <rect x="0" y="0" width="128" height="128" rx="20" fill="#0E766E"/>
-    <text x="64" y="48" text-anchor="middle" fill="#FFFFFF" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="17" font-weight="800">Guard</text>
-    <text x="64" y="75" text-anchor="middle" fill="#D6FFF8" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="13">scan</text>
-    <text x="64" y="94" text-anchor="middle" fill="#D6FFF8" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="13">redact</text>
-  </g>
-
-  <g transform="translate(664 252)">
-    <rect x="0" y="0" width="128" height="128" rx="20" fill="#F2B84B"/>
-    <text x="64" y="48" text-anchor="middle" fill="#241A05" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="17" font-weight="800">Evidence</text>
-    <text x="64" y="75" text-anchor="middle" fill="#5D4308" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="13">sources</text>
-    <text x="64" y="94" text-anchor="middle" fill="#5D4308" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="13">checks</text>
-  </g>
-
-  <g transform="translate(826 252)">
-    <rect x="0" y="0" width="128" height="128" rx="20" fill="#244C5A"/>
-    <text x="64" y="48" text-anchor="middle" fill="#FFFFFF" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="17" font-weight="800">Gate</text>
-    <text x="64" y="75" text-anchor="middle" fill="#C8E7EF" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="13">approve</text>
-    <text x="64" y="94" text-anchor="middle" fill="#C8E7EF" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="13">or block</text>
-  </g>
-
-  <g transform="translate(994 274)">
-    <rect x="0" y="0" width="72" height="86" rx="18" fill="#0F172A"/>
-    <path d="M23 44L34 55L52 31" stroke="#F2B84B" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <g font-family="Inter, ui-sans-serif, system-ui, sans-serif">
+    <g transform="translate(110 270)">
+      <rect width="126" height="96" rx="18" fill="#FFFFFF" stroke="#CBD5E1"/>
+      <text x="63" y="43" text-anchor="middle" fill="#0F172A" font-size="18" font-weight="800">Task</text>
+      <text x="63" y="68" text-anchor="middle" fill="#64748B" font-size="13">envelope</text>
+    </g>
+    <g transform="translate(277 270)">
+      <rect width="126" height="96" rx="18" fill="#113C47"/>
+      <text x="63" y="43" text-anchor="middle" fill="#FFFFFF" font-size="17" font-weight="800">Preflight</text>
+      <text x="63" y="68" text-anchor="middle" fill="#BFE7E2" font-size="13">can run?</text>
+    </g>
+    <g transform="translate(444 270)">
+      <rect width="126" height="96" rx="18" fill="#FFFFFF" stroke="#CBD5E1"/>
+      <text x="63" y="43" text-anchor="middle" fill="#0F172A" font-size="18" font-weight="800">Worker</text>
+      <text x="63" y="68" text-anchor="middle" fill="#64748B" font-size="13">candidate</text>
+    </g>
+    <g transform="translate(611 270)">
+      <rect width="126" height="96" rx="18" fill="#0E766E"/>
+      <text x="63" y="43" text-anchor="middle" fill="#FFFFFF" font-size="18" font-weight="800">Guard</text>
+      <text x="63" y="68" text-anchor="middle" fill="#D6FFF8" font-size="13">scan</text>
+    </g>
+    <g transform="translate(778 270)">
+      <rect width="150" height="96" rx="18" fill="#F2B84B"/>
+      <text x="75" y="39" text-anchor="middle" fill="#241A05" font-size="17" font-weight="800">Evidence</text>
+      <text x="75" y="63" text-anchor="middle" fill="#5D4308" font-size="13">verification</text>
+    </g>
+    <g transform="translate(969 270)">
+      <rect width="126" height="96" rx="18" fill="#244C5A"/>
+      <text x="63" y="43" text-anchor="middle" fill="#FFFFFF" font-size="17" font-weight="800">Release</text>
+      <text x="63" y="68" text-anchor="middle" fill="#C8E7EF" font-size="13">gate</text>
+    </g>
   </g>
 
   <g stroke="#94A3B8" stroke-width="3" stroke-linecap="round">
-    <path d="M293 317H326"/>
-    <path d="M468 317H489"/>
-    <path d="M630 317H651"/>
-    <path d="M792 317H813"/>
-    <path d="M954 317H981"/>
+    <path d="M236 318H264"/>
+    <path d="M403 318H431"/>
+    <path d="M570 318H598"/>
+    <path d="M737 318H765"/>
+    <path d="M928 318H956"/>
   </g>
 
-  <text x="136" y="468" fill="#0F172A" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="28" font-weight="800">Worker output is not truth yet.</text>
-  <text x="136" y="506" fill="#475569" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="21" font-weight="500">It is a candidate until it passes the audit gate.</text>
-  <rect x="851" y="449" width="215" height="52" rx="26" fill="#113C47"/>
-  <text x="958.5" y="483" text-anchor="middle" fill="#FFFFFF" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="17" font-weight="800">candidate approved</text>
+  <text x="122" y="460" fill="#0F172A" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="27" font-weight="800">Worker-reported evidence is a claim, not proof.</text>
+  <text x="122" y="499" fill="#475569" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="20" font-weight="500">Approved under configured checks; not proven true.</text>
+  <rect x="835" y="454" width="260" height="52" rx="26" fill="#113C47"/>
+  <text x="965" y="488" text-anchor="middle" fill="#FFFFFF" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="17" font-weight="800">eligible for release</text>
 </svg>

@@ -3,7 +3,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from agent_audit_kit.models import Finding, PreflightPolicy
+from agent_audit_kit.models import Finding, PreflightPolicy, PreflightResult
+
+
+BLOCKING_PREFLIGHT_KINDS = {"blocked_action", "forbidden_tool"}
 
 
 def _as_text_tuple(value: Any) -> tuple[str, ...]:
@@ -17,7 +20,7 @@ def _as_text_tuple(value: Any) -> tuple[str, ...]:
 
 
 def preflight_check(envelope: Mapping[str, Any], policy: PreflightPolicy) -> tuple[Finding, ...]:
-    """Check requested tools and actions before an agent task is trusted."""
+    """Return policy findings for a task envelope without executing the task."""
 
     findings: list[Finding] = []
     requested_actions = _as_text_tuple(envelope.get("requested_actions"))
@@ -41,3 +44,14 @@ def preflight_check(envelope: Mapping[str, Any], policy: PreflightPolicy) -> tup
         findings.append(Finding("network_requires_approval", "Network access is not auto-allowed"))
 
     return tuple(findings)
+
+
+def preflight_task(envelope: Mapping[str, Any], policy: PreflightPolicy) -> PreflightResult:
+    """Decide whether a task may execute before the worker is called."""
+
+    findings = preflight_check(envelope, policy)
+    if any(finding.severity == "high" or finding.kind in BLOCKING_PREFLIGHT_KINDS for finding in findings):
+        return PreflightResult("blocked", findings)
+    if findings:
+        return PreflightResult("needs_approval", findings)
+    return PreflightResult("allowed", ())

@@ -27,6 +27,26 @@ config = AuditConfig(custom_guards=(citation_guard,))
 result = audit_candidate(candidate, config=config)
 ```
 
+## Verified Evidence Callback
+
+Use a verifier when evidence comes from outside the worker, such as a log, test result, artifact, or human review.
+
+```python
+def verifier(candidate):
+    return {
+        "sources": ["ci-log"],
+        "checks_run": ["pytest"],
+        "artifacts": ["ci/pytest.log"],
+        "verifier": "ci",
+    }
+
+
+config = AuditConfig(verifier=verifier)
+result = audit_candidate(candidate, config=config)
+```
+
+Worker-reported evidence is a claim, not proof. A verifier should be controlled by the caller, not by the worker being audited.
+
 ## Review Callback
 
 Use a review callback when you want to route blocked or review-needed candidates to a human queue, log, UI, or issue tracker.
@@ -47,7 +67,7 @@ The callback only runs when the result is not `approved_candidate`.
 For async agent code:
 
 ```python
-result = await audit_candidate_async(candidate)
+result = await run_guarded_task_async(envelope, policy, worker, verifier=verifier)
 ```
 
-The current async API is intentionally thin. It keeps the same behavior as the sync API while fitting into async agent runners.
+The async API keeps the same trust-boundary semantics as the sync API.

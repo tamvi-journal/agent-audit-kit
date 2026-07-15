@@ -11,16 +11,23 @@ def citation_guard(output: CandidateOutput):
     return None
 
 
-config = AuditConfig(
-    custom_guards=(citation_guard,),
-)
+config = AuditConfig(custom_guards=(citation_guard,))
 
 candidate = CandidateOutput(
     content="According to the policy, this is allowed.",
     evidence={"checks_run": ["citation_guard"]},
 )
 
-result = audit_candidate(candidate, config=config)
+result = audit_candidate(
+    candidate,
+    config=config,
+    verified_evidence={
+        "sources": ["review-note"],
+        "checks_run": ["citation_guard"],
+        "artifacts": ["review-note.md"],
+        "verifier": "caller",
+    },
+)
 
 print(result.status)
 for explanation in result.explanations:

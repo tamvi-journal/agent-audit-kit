@@ -1,4 +1,4 @@
-from agent_audit_kit import CandidateOutput, PreflightPolicy, audit_candidate
+from agent_audit_kit import CandidateOutput, PreflightPolicy, run_guarded_task
 
 
 policy = PreflightPolicy(
@@ -9,25 +9,35 @@ policy = PreflightPolicy(
     blocked_actions=("read_secret", "print_secret"),
 )
 
-candidate = CandidateOutput(
-    content="Worker completed the task and ran tests.",
-    evidence={
+envelope = {
+    "requested_tools": ["filesystem_read", "terminal"],
+    "requested_actions": ["read_input", "run_tests"],
+    "network_access": False,
+}
+
+
+def worker(_envelope):
+    return CandidateOutput(
+        content="Worker completed a draft candidate.",
+        evidence={
+            "sources": ["worker-output"],
+            "checks_run": ["claimed-pytest"],
+            "missing_fields": [],
+        },
+    )
+
+
+def verifier(_candidate):
+    return {
         "sources": ["tests/test_agent_audit_kit.py"],
         "checks_run": ["pytest"],
-        "missing_fields": [],
-    },
-)
+        "artifacts": ["local pytest output"],
+        "verifier": "caller",
+    }
 
-result = audit_candidate(
-    candidate,
-    envelope={
-        "requested_tools": ["filesystem_read", "terminal"],
-        "requested_actions": ["read_input", "run_tests"],
-        "network_access": False,
-    },
-    policy=policy,
-)
+
+result = run_guarded_task(envelope, policy, worker, verifier=verifier)
 
 print(result.status)
-for finding in result.findings:
-    print(f"- {finding.severity}: {finding.kind} - {finding.message}")
+for explanation in result.explanations:
+    print(explanation)

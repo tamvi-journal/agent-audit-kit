@@ -1,21 +1,23 @@
 <p align="center">
-  <img src="assets/agent-audit-kit-hero.svg" alt="Agent Audit Kit pipeline: worker output passes through preflight, guard, evidence, verification, and gate before becoming an approved candidate." width="100%">
+  <img src="assets/agent-audit-kit-hero.svg" alt="Agent Audit Kit pipeline: task passes through preflight, worker execution, guard, evidence verification, and release gate." width="100%">
 </p>
 
 # Agent Audit Kit
 
 **Stop trusting agent output. Start auditing it.**
 
-Agent Audit Kit is a small, practical safety layer for AI agents, vibe-coded workers, and automation scripts. It turns an agent's first answer into a **candidate** that must pass preflight checks, guardrails, evidence review, verification, and a final gate.
+Agent Audit Kit is a small, practical safety layer for AI agents, vibe-coded workers, and automation scripts. It separates pre-execution permission checks from post-execution output audit, so an agent result stays a **candidate** until it passes the configured gate.
 
-> Worker output is not truth. It is a candidate until it passes the gate.
+> Worker-reported evidence is a claim, not proof.
+
+> `approved_candidate` means approved under the configured checks; not proven true.
 
 ## Why This Exists
 
 Many AI workflows fail in quiet ways:
 
-- A worker claims it finished, but no checks were run.
-- A report looks confident, but has no sources.
+- A worker claims it finished, but no verified checks exist.
+- A report looks confident, but only cites sources the worker claimed.
 - A script prints an API key into a log or markdown file.
 - An agent asks for a tool it should not have.
 - A generated patch is treated as safe before anyone audits it.
@@ -25,26 +27,28 @@ Agent Audit Kit gives builders a simple pattern for catching those failures befo
 ## The Pattern
 
 ```text
-Worker output
+Task envelope
     |
     v
-Preflight policy
+Preflight
     |
     v
-Guard and secret scan
+Worker executes
     |
     v
-Evidence packet
+Output guard
     |
     v
-Verification
+Evidence verification
     |
     v
-Gate decision
+Release gate
     |
     v
 approved_candidate | needs_review | blocked_candidate
 ```
+
+The trust boundary is important: preflight happens before worker execution. Output audit happens after worker execution.
 
 ## Quick Start
 
@@ -56,20 +60,91 @@ pytest
 ```
 
 ```python
-from agent_audit_kit import CandidateOutput, audit_candidate
+from agent_audit_kit import CandidateOutput, PreflightPolicy, run_guarded_task
 
-candidate = CandidateOutput(
-    content="Created the requested draft and ran tests.",
-    evidence={
-        "sources": ["local-test-log"],
-        "checks_run": ["pytest"],
-    },
+policy = PreflightPolicy(
+    allowed_tools=("filesystem_read",),
+    forbidden_tools=("network", "browser"),
+    allowed_actions=("draft_response",),
+    blocked_actions=("read_secret", "print_secret"),
 )
 
-result = audit_candidate(candidate)
+envelope = {
+    "requested_tools": ["filesystem_read"],
+    "requested_actions": ["draft_response"],
+    "network_access": False,
+}
+
+
+def worker(_envelope):
+    return CandidateOutput(
+        content="Draft response created.",
+        evidence={"sources": ["worker-log"], "checks_run": ["draft-created"]},
+    )
+
+
+def verifier(_candidate):
+    return {
+        "sources": ["test-log"],
+        "checks_run": ["manual-smoke-test"],
+        "artifacts": ["logs/smoke-test.txt"],
+        "verifier": "external-reviewer",
+    }
+
+
+result = run_guarded_task(envelope, policy, worker, verifier=verifier)
 
 print(result.status)
 # approved_candidate
+```
+
+## Preflight Before Worker Execution
+
+Use `preflight_task()` when you want to check whether a task may run.
+
+```python
+from agent_audit_kit import PreflightPolicy, preflight_task
+
+preflight = preflight_task(envelope, policy)
+
+if not preflight.can_execute:
+    print(preflight.status)
+    print(preflight.explanations)
+    raise SystemExit("Worker must not run.")
+```
+
+`audit_candidate()` still accepts `envelope` and `policy` for retrospective compatibility, but that is not a substitute for pre-execution preflight.
+
+## Claimed Evidence vs Verified Evidence
+
+`CandidateOutput.evidence` is claimed evidence. It is useful, but it is not proof.
+
+```python
+candidate = CandidateOutput(
+    content="Worker says tests passed.",
+    evidence={"sources": ["worker"], "checks_run": ["pytest"]},
+)
+
+result = audit_candidate(candidate)
+print(result.status)
+# needs_review
+```
+
+To become eligible for release, provide independently verified evidence:
+
+```python
+result = audit_candidate(
+    candidate,
+    verified_evidence={
+        "sources": ["ci-log"],
+        "checks_run": ["pytest"],
+        "artifacts": ["ci/pytest.log"],
+        "verifier": "ci",
+    },
+)
+
+print(result.eligible_for_release)
+# True
 ```
 
 ## Configuration and Custom Guards
@@ -84,17 +159,14 @@ def citation_guard(output: CandidateOutput):
     if "according to" in output.content.lower() and not output.evidence.get("sources"):
         return Finding(
             kind="citation_needed",
-            message="This claim needs a source before approval.",
+            message="This claim needs a source before release.",
             severity="medium",
         )
     return None
 
 
 result = audit_candidate(
-    CandidateOutput(
-        content="According to the policy, this is allowed.",
-        evidence={"checks_run": ["citation_guard"]},
-    ),
+    CandidateOutput(content="According to the policy, this is allowed."),
     config=AuditConfig(custom_guards=(citation_guard,)),
 )
 
@@ -107,14 +179,15 @@ See [docs/EXTENDING.md](docs/EXTENDING.md).
 ## Async Use
 
 ```python
-from agent_audit_kit import CandidateOutput, audit_candidate_async
+from agent_audit_kit import CandidateOutput, run_guarded_task_async
 
-result = await audit_candidate_async(
-    CandidateOutput(
+async def worker(_envelope):
+    return CandidateOutput(
         content="Async worker produced a candidate.",
-        evidence={"sources": ["worker-log"], "checks_run": ["unit-test"]},
+        evidence={"sources": ["worker-log"], "checks_run": ["draft-created"]},
     )
-)
+
+result = await run_guarded_task_async(envelope, policy, worker, verifier=verifier)
 ```
 
 ## Secret Leak Example
@@ -128,7 +201,13 @@ result = audit_candidate(
     CandidateOutput(
         content="OPENAI_API_KEY=" + fake_key,
         evidence={"sources": ["unit-test"], "checks_run": ["secret-scan"]},
-    )
+    ),
+    verified_evidence={
+        "sources": ["unit-test"],
+        "checks_run": ["secret-scan"],
+        "artifacts": ["synthetic-test"],
+        "verifier": "unit-test",
+    },
 )
 
 print(result.status)
@@ -140,11 +219,11 @@ print(result.output.content)
 
 ## What It Checks
 
-- **Preflight**: did the agent request allowed tools and actions?
+- **Preflight**: may the task run before the worker executes?
 - **Guard**: does output contain secret-like material?
-- **Evidence packet**: did the candidate include sources and checks?
-- **Verification**: does the candidate declare what was checked and what is missing?
-- **Gate**: should the output be approved, reviewed, or blocked?
+- **Claimed evidence**: what did the worker or caller claim?
+- **Verified evidence**: what did an external verifier confirm?
+- **Release gate**: should the candidate be released, reviewed, or blocked?
 
 Every non-passing result includes explainable findings:
 
@@ -153,15 +232,26 @@ for explanation in result.explanations:
     print(explanation)
 ```
 
+## What This Does Not Prove
+
+Agent Audit Kit:
+
+- does not prove output is factually true;
+- does not replace sandboxing, IAM, access control, or secret managers;
+- cannot save a credential that has already been committed to git history;
+- only audits according to the checks you configure;
+- does not make a workflow safe if the caller skips preflight or the release gate.
+
 ## For Non-Technical Builders
 
 You can use the idea even before using the code:
 
 1. Treat every AI answer as a candidate.
-2. Ask what evidence supports it.
-3. Scan for secrets before sharing or committing.
-4. Require checks before accepting completion claims.
-5. Put a final approval gate between the agent and the real world.
+2. Check permission before the AI worker runs.
+3. Ask what evidence the worker claims.
+4. Verify that evidence outside the worker.
+5. Scan for secrets before sharing or committing.
+6. Put a release gate between the agent and the real world.
 
 See [docs/NON_TECH_GUIDE.md](docs/NON_TECH_GUIDE.md).
 
@@ -174,6 +264,7 @@ See [docs/FEEDBACK_GUIDE.md](docs/FEEDBACK_GUIDE.md).
 ## Examples
 
 - [examples/basic_audit.py](examples/basic_audit.py)
+- [examples/nontech_flow.py](examples/nontech_flow.py)
 - [examples/pure_python_agent.py](examples/pure_python_agent.py)
 - [examples/custom_guard.py](examples/custom_guard.py)
 - [examples/async_audit.py](examples/async_audit.py)
