@@ -9,6 +9,7 @@ Good feedback includes:
 - A case where the gate was too loose.
 - A confusing term in the README or non-tech guide.
 - A useful check that should be added to the evidence packet.
+- A framework integration example that would help you adopt the kit faster.
 
 Please avoid sharing real secrets, credentials, personal data, private prompts, or private logs in issues or discussions.
 

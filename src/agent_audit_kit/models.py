@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from collections.abc import Callable, Iterable
 from typing import Any, Mapping
 
 
@@ -10,6 +11,7 @@ class Finding:
     message: str
     source: str = ""
     severity: str = "medium"
+    details: Mapping[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -30,6 +32,9 @@ class CandidateOutput:
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
 
+CustomGuard = Callable[[CandidateOutput], Finding | Iterable[Finding] | None]
+
+
 @dataclass(frozen=True)
 class AuditResult:
     status: str
@@ -40,3 +45,17 @@ class AuditResult:
     @property
     def passed(self) -> bool:
         return self.status == "approved_candidate"
+
+    @property
+    def explanations(self) -> tuple[str, ...]:
+        return tuple(
+            f"{finding.severity}: {finding.kind} - {finding.message}"
+            for finding in self.findings
+        )
+
+
+@dataclass(frozen=True)
+class AuditConfig:
+    policy: PreflightPolicy | None = None
+    custom_guards: tuple[CustomGuard, ...] = ()
+    require_evidence: bool = True

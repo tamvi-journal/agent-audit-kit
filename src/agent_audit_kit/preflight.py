@@ -17,6 +17,8 @@ def _as_text_tuple(value: Any) -> tuple[str, ...]:
 
 
 def preflight_check(envelope: Mapping[str, Any], policy: PreflightPolicy) -> tuple[Finding, ...]:
+    """Check requested tools and actions before an agent task is trusted."""
+
     findings: list[Finding] = []
     requested_actions = _as_text_tuple(envelope.get("requested_actions"))
     requested_tools = _as_text_tuple(envelope.get("requested_tools"))

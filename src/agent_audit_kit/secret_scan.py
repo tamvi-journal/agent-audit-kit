@@ -54,13 +54,21 @@ def scan_text(text: str | None, *, source: str = "candidate_output") -> SecretSc
     redacted = value
 
     for kind, pattern, redaction in SECRET_PATTERNS:
-        if pattern.search(value):
+        for match in pattern.finditer(value):
+            line, column = _line_column(value, match.start())
             findings.append(
                 Finding(
                     kind=kind,
                     message=f"{kind} detected and redacted",
                     source=source,
                     severity="high",
+                    details={
+                        "line": line,
+                        "column": column,
+                        "start": match.start(),
+                        "end": match.end(),
+                        "redaction": redaction,
+                    },
                 )
             )
         redacted = pattern.sub(redaction, redacted)
@@ -70,3 +78,10 @@ def scan_text(text: str | None, *, source: str = "candidate_output") -> SecretSc
 
 def redact_text(text: str | None, *, source: str = "candidate_output") -> str:
     return scan_text(text, source=source).redacted_text
+
+
+def _line_column(text: str, index: int) -> tuple[int, int]:
+    line = text.count("\n", 0, index) + 1
+    line_start = text.rfind("\n", 0, index)
+    column = index + 1 if line_start < 0 else index - line_start
+    return line, column

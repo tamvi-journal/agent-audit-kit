@@ -27,6 +27,8 @@ class GateDecision:
 
 
 def gate_candidate(findings: tuple[Finding, ...]) -> GateDecision:
+    """Convert findings into a final candidate status."""
+
     if any(finding.kind in BLOCKING_KINDS or finding.severity == "high" for finding in findings):
         return GateDecision("blocked_candidate", findings)
     if findings:

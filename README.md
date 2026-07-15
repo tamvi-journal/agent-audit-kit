@@ -72,6 +72,51 @@ print(result.status)
 # approved_candidate
 ```
 
+## Configuration and Custom Guards
+
+Use `AuditConfig` and custom guards when your agent has domain-specific rules.
+
+```python
+from agent_audit_kit import AuditConfig, CandidateOutput, Finding, audit_candidate
+
+
+def citation_guard(output: CandidateOutput):
+    if "according to" in output.content.lower() and not output.evidence.get("sources"):
+        return Finding(
+            kind="citation_needed",
+            message="This claim needs a source before approval.",
+            severity="medium",
+        )
+    return None
+
+
+result = audit_candidate(
+    CandidateOutput(
+        content="According to the policy, this is allowed.",
+        evidence={"checks_run": ["citation_guard"]},
+    ),
+    config=AuditConfig(custom_guards=(citation_guard,)),
+)
+
+print(result.status)
+# needs_review
+```
+
+See [docs/EXTENDING.md](docs/EXTENDING.md).
+
+## Async Use
+
+```python
+from agent_audit_kit import CandidateOutput, audit_candidate_async
+
+result = await audit_candidate_async(
+    CandidateOutput(
+        content="Async worker produced a candidate.",
+        evidence={"sources": ["worker-log"], "checks_run": ["unit-test"]},
+    )
+)
+```
+
 ## Secret Leak Example
 
 ```python
@@ -101,6 +146,13 @@ print(result.output.content)
 - **Verification**: does the candidate declare what was checked and what is missing?
 - **Gate**: should the output be approved, reviewed, or blocked?
 
+Every non-passing result includes explainable findings:
+
+```python
+for explanation in result.explanations:
+    print(explanation)
+```
+
 ## For Non-Technical Builders
 
 You can use the idea even before using the code:
@@ -118,6 +170,18 @@ See [docs/NON_TECH_GUIDE.md](docs/NON_TECH_GUIDE.md).
 The first public version is intentionally small. If you test it, the most useful feedback is whether the gate feels too strict, too loose, or confusing.
 
 See [docs/FEEDBACK_GUIDE.md](docs/FEEDBACK_GUIDE.md).
+
+## Examples
+
+- [examples/basic_audit.py](examples/basic_audit.py)
+- [examples/pure_python_agent.py](examples/pure_python_agent.py)
+- [examples/custom_guard.py](examples/custom_guard.py)
+- [examples/async_audit.py](examples/async_audit.py)
+- [examples/langchain_style_wrapper.py](examples/langchain_style_wrapper.py)
+
+## Roadmap
+
+Agent Audit Kit should stay lightweight. Useful next additions may include optional adapters for popular agent frameworks, stronger optional secret scanning, and richer human-review queues. Those should be optional layers, not required dependencies.
 
 ## Public Boundary
 

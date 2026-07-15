@@ -25,6 +25,8 @@ class EvidencePacket:
 
 
 def verify_evidence_packet(packet: EvidencePacket) -> tuple[Finding, ...]:
+    """Check whether a candidate declared useful sources and checks."""
+
     findings: list[Finding] = []
     if not packet.sources:
         findings.append(Finding("missing_sources", "Candidate output has no cited sources"))
