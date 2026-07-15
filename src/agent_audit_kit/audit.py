@@ -141,6 +141,7 @@ def run_guarded_task(
         output,
         config=active_config,
         verified_evidence=verified_evidence,
+        envelope=envelope,
         custom_guards=(),
         review_callback=review_callback,
     )
@@ -170,6 +171,7 @@ async def run_guarded_task_async(
         output,
         config=active_config,
         verified_evidence=verified_evidence,
+        envelope=envelope,
         custom_guards=(),
         review_callback=review_callback,
     )
@@ -185,11 +187,15 @@ def _coerce_evidence(value: Mapping[str, Any] | EvidencePacket | None) -> Eviden
 
 
 def _worker_identity(output: CandidateOutput, envelope: Mapping[str, Any] | None) -> str | None:
-    for source in (output.metadata, envelope or {}):
-        for key in ("worker_id", "worker", "agent_id"):
-            value = source.get(key)
-            if value:
-                return str(value)
+    trusted_envelope = envelope or {}
+    for key in ("worker_id", "worker", "agent_id"):
+        value = trusted_envelope.get(key)
+        if value:
+            return str(value)
+    for key in ("worker_id", "worker", "agent_id"):
+        value = output.metadata.get(key)
+        if value:
+            return str(value)
     return None
 
 

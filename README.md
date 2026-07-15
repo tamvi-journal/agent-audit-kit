@@ -8,7 +8,6 @@
 
 Agent Audit Kit is a small, practical safety layer for AI agents, vibe-coded workers, and automation scripts. It separates pre-execution permission checks from post-execution output audit, so an agent result stays a **candidate** until it passes the configured gate.
 
-It is an operational audit layer for agent workflows, not an identity, voice, or relationship gate.
 
 > Worker-reported evidence is a claim, not proof.
 
