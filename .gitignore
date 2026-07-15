@@ -1,0 +1,21 @@
+.DS_Store
+__pycache__/
+.pytest_cache/
+.venv/
+*.pyc
+dist/
+build/
+*.egg-info/
+
+# Secret material must stay local.
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+token.json
+secrets.json
+id_rsa
+id_ed25519
