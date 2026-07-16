@@ -20,8 +20,9 @@ from agent_audit_kit.models import (
 from agent_audit_kit.preflight import preflight_check, preflight_task
 
 
-WorkerFn = Callable[[Mapping[str, Any]], CandidateOutput]
-AsyncWorkerFn = Callable[[Mapping[str, Any]], CandidateOutput | Awaitable[CandidateOutput]]
+CandidateLike = CandidateOutput | Mapping[str, Any]
+WorkerFn = Callable[[Mapping[str, Any]], CandidateLike]
+AsyncWorkerFn = Callable[[Mapping[str, Any]], CandidateLike | Awaitable[CandidateLike]]
 ReviewCallback = Callable[[AuditResult], None]
 
 
@@ -34,7 +35,7 @@ def _as_findings(value: Finding | tuple[Finding, ...] | list[Finding] | None) ->
 
 
 def audit_candidate(
-    output: CandidateOutput,
+    output: CandidateLike,
     *,
     config: AuditConfig | None = None,
     verified_evidence: Mapping[str, Any] | EvidencePacket | None = None,
@@ -45,14 +46,12 @@ def audit_candidate(
 ) -> AuditResult:
     """Audit worker output after execution.
 
-    This function is the output-side audit gate. If `envelope` and `policy` are
-    passed, they are checked retrospectively for compatibility with older code,
-    but that check does not replace pre-execution `preflight_task()`.
-
-    `approved_candidate` means eligible under the configured checks. It does not
-    prove the content is true.
+    Mapping-shaped worker packets are normalized into the shared candidate
+    contract. approved_candidate means eligible under configured checks; it
+    does not prove the content is true.
     """
 
+    candidate = _coerce_candidate(output)
     findings: list[Finding] = []
     active_config = config or AuditConfig()
     active_policy = policy or active_config.policy
@@ -61,7 +60,7 @@ def audit_candidate(
     if envelope is not None and active_policy is not None:
         findings.extend(preflight_check(envelope, active_policy))
 
-    guarded_output, guard_findings = guard_candidate_output(output)
+    guarded_output, guard_findings = guard_candidate_output(candidate)
     findings.extend(guard_findings)
 
     for guard in active_guards:
@@ -71,6 +70,15 @@ def audit_candidate(
     if verifier_output is None and active_config.verifier is not None:
         verifier_output = active_config.verifier(guarded_output)
 
+    worker_identity, identity_mismatch, invalid_identity = _worker_identities(guarded_output, envelope)
+    if invalid_identity:
+        findings.append(
+            Finding(
+                "invalid_worker_identity",
+                "Worker identity fields must be nonblank strings.",
+            )
+        )
+
     claimed_packet = EvidencePacket.from_mapping(guarded_output.evidence)
     verified_packet = _coerce_evidence(verifier_output)
     findings.extend(
@@ -79,12 +87,13 @@ def audit_candidate(
             verified_packet,
             require_claimed=active_config.require_claimed_evidence,
             require_verified=active_config.require_verified_evidence,
-            worker_identity=_worker_identity(guarded_output, envelope),
+            worker_identity=worker_identity,
+            identity_mismatch=identity_mismatch,
         )
     )
 
     decision = gate_candidate(tuple(findings))
-    has_secret_redaction = any(finding.kind != "secret_scan_scope" for finding in guard_findings)
+    has_secret_redaction = guarded_output.content != candidate.content
     result = AuditResult(
         status=decision.status,
         output=guarded_output,
@@ -97,7 +106,7 @@ def audit_candidate(
 
 
 async def audit_candidate_async(
-    output: CandidateOutput,
+    output: CandidateLike,
     *,
     config: AuditConfig | None = None,
     verified_evidence: Mapping[str, Any] | EvidencePacket | None = None,
@@ -178,6 +187,14 @@ async def run_guarded_task_async(
     return GuardedTaskResult(audit.status, preflight, audit=audit, worker_ran=True)
 
 
+def _coerce_candidate(value: CandidateLike) -> CandidateOutput:
+    if isinstance(value, CandidateOutput):
+        return value
+    if isinstance(value, Mapping):
+        return CandidateOutput.from_mapping(value)
+    raise TypeError("Candidate output must be CandidateOutput or a mapping")
+
+
 def _coerce_evidence(value: Mapping[str, Any] | EvidencePacket | None) -> EvidencePacket | None:
     if value is None:
         return None
@@ -186,17 +203,41 @@ def _coerce_evidence(value: Mapping[str, Any] | EvidencePacket | None) -> Eviden
     return EvidencePacket.from_mapping(value)
 
 
-def _worker_identity(output: CandidateOutput, envelope: Mapping[str, Any] | None) -> str | None:
-    trusted_envelope = envelope or {}
+def _identity_from_mapping(value: Mapping[str, Any] | None) -> tuple[str | None, bool]:
+    data = value or {}
+    identities: list[str] = []
+    invalid = False
     for key in ("worker_id", "worker", "agent_id"):
-        value = trusted_envelope.get(key)
-        if value:
-            return str(value)
-    for key in ("worker_id", "worker", "agent_id"):
-        value = output.metadata.get(key)
-        if value:
-            return str(value)
-    return None
+        if key not in data:
+            continue
+        item = data.get(key)
+        if not isinstance(item, str) or not item.strip():
+            invalid = True
+            continue
+        identities.append(item.strip())
+
+    if len(set(identities)) > 1:
+        return None, True
+    return (identities[0] if identities else None), invalid
+
+
+def _worker_identities(
+    output: CandidateOutput,
+    envelope: Mapping[str, Any] | None,
+) -> tuple[str | None, bool, bool]:
+    envelope_identity, invalid_envelope_identity = _identity_from_mapping(envelope)
+    packet_identity, invalid_packet_identity = _identity_from_mapping(output.metadata)
+    worker_identity = envelope_identity or packet_identity
+    mismatch = bool(
+        envelope_identity
+        and packet_identity
+        and envelope_identity != packet_identity
+    )
+    return (
+        worker_identity,
+        mismatch,
+        invalid_envelope_identity or invalid_packet_identity,
+    )
 
 
 def _with_verifier(
