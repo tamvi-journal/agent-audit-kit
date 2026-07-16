@@ -1,6 +1,6 @@
 # Non-Tech Guide
 
-Agent Audit Kit is for people who use AI tools to build things but do not want to blindly trust every AI-generated answer, file, command, or report.
+TamVi Agent Gate is for people who use AI tools to build things but do not want to blindly trust every AI-generated answer, file, command, or report.
 
 The core idea is simple:
 

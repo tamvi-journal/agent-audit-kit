@@ -1,9 +1,79 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 from agent_audit_kit.models import Finding
+
+
+INSPECTABLE_ARTIFACT_FIELDS = (
+    "path",
+    "locator",
+    "uri",
+    "url",
+    "artifact_id",
+    "id",
+    "sha256",
+)
+
+
+def _first_present(data: Mapping[str, Any], keys: tuple[str, ...]) -> Any:
+    for key in keys:
+        if key in data:
+            return data[key]
+    return None
+
+
+def _clean_text_items(value: Any) -> tuple[str, ...]:
+    if isinstance(value, str):
+        items = (value,)
+    elif isinstance(value, (list, tuple)):
+        items = value
+    elif isinstance(value, set):
+        items = sorted(value, key=repr)
+    else:
+        return ()
+
+    cleaned: list[str] = []
+    for item in items:
+        if not isinstance(item, str):
+            continue
+        text = item.strip()
+        if text and text not in cleaned:
+            cleaned.append(text)
+    return tuple(cleaned)
+
+
+def _artifact_locator(value: Any) -> str | None:
+    if isinstance(value, str):
+        text = value.strip()
+        return text or None
+    if not isinstance(value, Mapping):
+        return None
+    for field in INSPECTABLE_ARTIFACT_FIELDS:
+        item = value.get(field)
+        if isinstance(item, str) and item.strip():
+            return item.strip()
+    return None
+
+
+def _clean_artifacts(value: Any) -> tuple[str, ...]:
+    if isinstance(value, (str, Mapping)):
+        items = (value,)
+    elif isinstance(value, (list, tuple)):
+        items = value
+    elif isinstance(value, set):
+        items = sorted(value, key=repr)
+    else:
+        return ()
+
+    cleaned: list[str] = []
+    for item in items:
+        locator = _artifact_locator(item)
+        if locator and locator not in cleaned:
+            cleaned.append(locator)
+    return tuple(cleaned)
 
 
 @dataclass(frozen=True)
@@ -18,18 +88,44 @@ class EvidencePacket:
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any] | None) -> "EvidencePacket":
         data = dict(value or {})
+        raw_verifier = _first_present(data, ("verifier", "verified_by"))
+        verifier = raw_verifier.strip() if isinstance(raw_verifier, str) else ""
         return cls(
-            sources=tuple(str(item) for item in data.get("sources", ()) or ()),
-            checks_run=tuple(str(item) for item in data.get("checks_run", ()) or ()),
-            artifacts=tuple(str(item) for item in data.get("artifacts", ()) or ()),
-            verifier=str(data.get("verifier") or data.get("verified_by") or ""),
-            missing_fields=tuple(str(item) for item in data.get("missing_fields", ()) or ()),
-            notes=tuple(str(item) for item in data.get("notes", ()) or ()),
+            sources=_clean_text_items(
+                _first_present(data, ("sources", "source_refs", "verified_sources"))
+            ),
+            checks_run=_clean_text_items(
+                _first_present(data, ("checks_run", "verified_checks"))
+            ),
+            artifacts=_clean_artifacts(
+                _first_present(
+                    data,
+                    (
+                        "artifacts",
+                        "evidence_handles",
+                        "verified_evidence_handles",
+                        "artifact_handles",
+                    ),
+                )
+            ),
+            verifier=verifier,
+            missing_fields=_clean_text_items(data.get("missing_fields")),
+            notes=_clean_text_items(data.get("notes")),
         )
 
     @property
     def has_any_evidence(self) -> bool:
-        return bool(self.sources or self.checks_run or self.artifacts or self.verifier or self.notes)
+        return bool(self.sources or self.checks_run or self.artifacts or self.verifier)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "sources": list(self.sources),
+            "checks_run": list(self.checks_run),
+            "artifacts": list(self.artifacts),
+            "verifier": self.verifier,
+            "missing_fields": list(self.missing_fields),
+            "notes": list(self.notes),
+        }
 
 
 def verify_evidence_packet(
@@ -39,10 +135,19 @@ def verify_evidence_packet(
     require_claimed: bool = True,
     require_verified: bool = True,
     worker_identity: str | None = None,
+    identity_mismatch: bool = False,
 ) -> tuple[Finding, ...]:
     """Check claimed evidence separately from independently verified evidence."""
 
     findings: list[Finding] = []
+
+    if identity_mismatch:
+        findings.append(
+            Finding(
+                "worker_identity_mismatch",
+                "Candidate worker identity differs from the trusted envelope identity.",
+            )
+        )
 
     if require_claimed:
         if not claimed.sources:
@@ -60,9 +165,15 @@ def verify_evidence_packet(
         )
 
     if not require_verified:
+        findings.append(
+            Finding(
+                "verification_requirement_disabled",
+                "Disabling verified evidence cannot grant release eligibility; route this candidate to review.",
+            )
+        )
         return tuple(findings)
 
-    if verified is None or not verified.has_any_evidence:
+    if verified is None:
         findings.append(
             Finding(
                 "missing_verified_evidence",

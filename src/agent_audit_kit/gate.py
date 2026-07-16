@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from agent_audit_kit.models import Finding
+from agent_audit_kit.models import CONTRACT_VERSION, Finding
 
 
 BLOCKING_KINDS = {
@@ -24,6 +24,14 @@ class GateDecision:
     @property
     def approved(self) -> bool:
         return self.status == "approved_candidate"
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "contract_version": CONTRACT_VERSION,
+            "status": self.status,
+            "approved": self.approved,
+            "findings": [finding.to_dict() for finding in self.findings],
+        }
 
 
 def gate_candidate(findings: tuple[Finding, ...]) -> GateDecision:

@@ -1,57 +1,34 @@
 <p align="center">
-  <img src="assets/agent-audit-kit-hero.svg" alt="Agent Audit Kit pipeline: task passes through preflight, worker execution, guard, evidence verification, and release gate." width="100%">
+  <img src="assets/tamvi-agent-gate-hero.svg" alt="TamVi Agent Gate pipeline: task passes through preflight, worker execution, guard, evidence verification, and release gate." width="100%">
 </p>
 
-# Agent Audit Kit
+# TamVi Agent Gate
 
-**Stop trusting agent output. Start auditing it.**
+**A small, versioned preflight and candidate-release gate shared across AI agents.**
 
-Agent Audit Kit is a small, practical safety layer for AI agents, vibe-coded workers, and automation scripts. It separates pre-execution permission checks from post-execution output audit, so an agent result stays a **candidate** until it passes the configured gate.
-
+TamVi Agent Gate is the generic governance kernel extracted from a larger agent runtime. It stays separate from every agent's identity, memory, orchestration, and domain logic.
 
 > Worker-reported evidence is a claim, not proof.
 
-> `approved_candidate` means approved under the configured checks; not proven true.
+> `approved_candidate` means eligible under configured checks; not proven true.
 
-## Why This Exists
-
-Many AI workflows fail in quiet ways:
-
-- A worker claims it finished, but no verified checks exist.
-- A report looks confident, but only cites sources the worker claimed.
-- A script prints an API key into a log or markdown file.
-- An agent asks for a tool it should not have.
-- A generated patch is treated as safe before anyone audits it.
-
-Agent Audit Kit gives builders a simple pattern for catching those failures before they reach a user, a commit, a production system, or an external action.
-
-## The Pattern
+## Stable trust boundary
 
 ```text
-Task envelope
-    |
-    v
-Preflight
-    |
-    v
-Worker executes
-    |
-    v
-Output guard
-    |
-    v
-Evidence verification
-    |
-    v
-Release gate
-    |
-    v
-approved_candidate | needs_review | blocked_candidate
+trusted envelope -> preflight -> worker -> output guard -> external evidence check -> release gate
 ```
 
-The trust boundary is important: preflight happens before worker execution. Output audit happens after worker execution.
+- Preflight must run before the worker.
+- The trusted envelope identity is authoritative.
+- Candidate metadata cannot override envelope identity.
+- A worker cannot verify its own output.
+- Verified evidence needs a different verifier principal and an inspectable artifact.
+- Disabling verified evidence can only route to review; it cannot grant release eligibility.
+- Secret scanning is pattern-based and does not replace sandboxing, IAM, secret managers, or repository-history cleanup.
 
-## Quick Start
+## Install for development
+
+The distribution name is `tamvi-agent-gate`; the import namespace remains `agent_audit_kit` for compatibility.
 
 ```bash
 python -m venv .venv
@@ -60,236 +37,135 @@ pip install -e ".[dev]"
 pytest
 ```
 
+The project is prepared for packaging but is not published yet. The unrelated `agent-audit-kit` name is already used on PyPI, so this project must not publish under that name.
+
+## Python API
+
+Mapping-shaped worker packets can be passed directly:
+
 ```python
-from agent_audit_kit import CandidateOutput, PreflightPolicy, run_guarded_task
+from agent_audit_kit import PreflightPolicy, run_guarded_task
 
 policy = PreflightPolicy(
     allowed_tools=("filesystem_read",),
-    forbidden_tools=("network", "browser"),
     allowed_actions=("draft_response",),
-    blocked_actions=("read_secret", "print_secret"),
 )
 
 envelope = {
+    "worker_id": "research-worker",
     "requested_tools": ["filesystem_read"],
     "requested_actions": ["draft_response"],
     "network_access": False,
 }
 
-
 def worker(_envelope):
-    return CandidateOutput(
-        content="Draft response created.",
-        evidence={"sources": ["worker-log"], "checks_run": ["draft-created"]},
-    )
-
-
-def verifier(_candidate):
     return {
-        "sources": ["test-log"],
-        "checks_run": ["manual-smoke-test"],
-        "artifacts": ["logs/smoke-test.txt"],
-        "verifier": "external-reviewer",
+        "worker_id": "research-worker",
+        "content": "Candidate report.",
+        "sources": ["worker-log"],
+        "checks_run": ["claimed-read"],
+        "evidence_handles": [{"path": "artifacts/claimed.txt"}],
     }
 
+verified = {
+    "verified_by": "mainbrain",
+    "sources": ["ci-log"],
+    "verified_checks": ["pytest"],
+    "evidence_handles": [{"path": "artifacts/pytest.log"}],
+}
 
-result = run_guarded_task(envelope, policy, worker, verifier=verifier)
-
-print(result.status)
-# approved_candidate
-```
-
-## Preflight Before Worker Execution
-
-Use `preflight_task()` when you want to check whether a task may run.
-
-```python
-from agent_audit_kit import PreflightPolicy, preflight_task
-
-preflight = preflight_task(envelope, policy)
-
-if not preflight.can_execute:
-    print(preflight.status)
-    print(preflight.explanations)
-    raise SystemExit("Worker must not run.")
-```
-
-`audit_candidate()` still accepts `envelope` and `policy` for retrospective compatibility, but that is not a substitute for pre-execution preflight.
-
-## Claimed Evidence vs Verified Evidence
-
-`CandidateOutput.evidence` is claimed evidence. It is useful, but it is not proof.
-
-```python
-candidate = CandidateOutput(
-    content="Worker says tests passed.",
-    evidence={"sources": ["worker"], "checks_run": ["pytest"]},
-)
-
-result = audit_candidate(candidate)
-print(result.status)
-# needs_review
-```
-
-To become eligible for release, provide independently verified evidence:
-
-```python
-result = audit_candidate(
-    candidate,
-    verified_evidence={
-        "sources": ["ci-log"],
-        "checks_run": ["pytest"],
-        "artifacts": ["ci/pytest.log"],
-        "verifier": "ci",
-    },
-)
-
-print(result.eligible_for_release)
-# True
-```
-
-Verified evidence must come from a deterministic check, a human reviewer, or an independent system that leaves an inspectable artifact. An LLM saying "looks correct" is not verification. If an LLM participates, it must be a different principal than the worker and attach a machine-checkable artifact such as a diff, test log, or review record.
-
-## Configuration and Custom Guards
-
-Use `AuditConfig` and custom guards when your agent has domain-specific rules.
-
-```python
-from agent_audit_kit import AuditConfig, CandidateOutput, Finding, audit_candidate
-
-
-def citation_guard(output: CandidateOutput):
-    if "according to" in output.content.lower() and not output.evidence.get("sources"):
-        return Finding(
-            kind="citation_needed",
-            message="This claim needs a source before release.",
-            severity="medium",
-        )
-    return None
-
-
-result = audit_candidate(
-    CandidateOutput(content="According to the policy, this is allowed."),
-    config=AuditConfig(custom_guards=(citation_guard,)),
+result = run_guarded_task(
+    envelope,
+    policy,
+    worker,
+    verified_evidence=verified,
 )
 
 print(result.status)
-# needs_review
+print(result.to_dict())
 ```
 
-See [docs/EXTENDING.md](docs/EXTENDING.md).
+## JSON CLI
 
-## Async Use
+The CLI audits data. It deliberately does not execute arbitrary agent scripts.
+
+```bash
+tamvi-agent-gate preflight --envelope envelope.json --policy policy.json
+
+tamvi-agent-gate audit \
+  --candidate candidate.json \
+  --verified verified.json \
+  --envelope envelope.json \
+  --policy policy.json
+```
+
+For `audit`, `--policy` requires `--envelope`; the CLI rejects a policy it cannot evaluate.
+
+| Exit | Meaning |
+|---:|---|
+| `0` | allowed / approved candidate |
+| `2` | needs approval / needs review |
+| `3` | blocked |
+| `4` | invalid JSON or input contract |
+
+Decision and invalid-input records emitted by the subcommands are versioned JSON with `contract_version: "1.0"`; `--version` remains plain text.
+
+## Optional built-in guards
+
+Built-in guards are opt-in and dependency-free:
 
 ```python
-from agent_audit_kit import CandidateOutput, run_guarded_task_async
+from agent_audit_kit import (
+    AuditConfig,
+    forbidden_terms_guard,
+    max_length_guard,
+    require_metadata_fields_guard,
+)
 
-async def worker(_envelope):
-    return CandidateOutput(
-        content="Async worker produced a candidate.",
-        evidence={"sources": ["worker-log"], "checks_run": ["draft-created"]},
+config = AuditConfig(
+    custom_guards=(
+        max_length_guard(20_000),
+        forbidden_terms_guard(["internal-only"]),
+        require_metadata_fields_guard("worker_id", "task_id"),
     )
-
-result = await run_guarded_task_async(envelope, policy, worker, verifier=verifier)
-```
-
-## Secret Leak Example
-
-```python
-from agent_audit_kit import CandidateOutput, audit_candidate
-
-fake_key = "sk-proj-" + "abcdefghijklmnopqrstuvwxyz1234567890"
-
-result = audit_candidate(
-    CandidateOutput(
-        content="OPENAI_API_KEY=" + fake_key,
-        evidence={"sources": ["unit-test"], "checks_run": ["secret-scan"]},
-    ),
-    verified_evidence={
-        "sources": ["unit-test"],
-        "checks_run": ["secret-scan"],
-        "artifacts": ["synthetic-test"],
-        "verifier": "unit-test",
-    },
 )
-
-print(result.status)
-# blocked_candidate
-
-print(result.output.content)
-# OPENAI_API_KEY=<redacted>
 ```
 
-Secret scanning is pattern-based: it catches known key formats only, and a pass is not a guarantee that no secret exists. It does not replace secret managers, pre-commit scanners, or repository-history cleanup.
+Domain-specific truth checks should remain outside this kernel and attach verified evidence through the caller-controlled envelope.
 
-Redaction in the candidate output does not un-leak anything already written to logs, disk, screenshots, or git history.
+## Shared-agent integration
 
-## What It Checks
+Each agent should add only a thin adapter:
 
-- **Preflight**: may the task run before the worker executes?
-- **Guard**: does output contain secret-like material?
-- **Claimed evidence**: what did the worker or caller claim?
-- **Verified evidence**: what did an external verifier confirm?
-- **Release gate**: should the candidate be released, reviewed, or blocked?
+1. Map its worker packet to `CandidateOutput` fields.
+2. Pass the trusted invocation envelope separately.
+3. Keep worker evidence claimed-only.
+4. Let MainBrain, CI, a human, or another independent principal attach verified evidence.
+5. Consume the versioned audit record and honor the release status.
 
-Every non-passing result includes explainable findings:
+See [docs/SHARED_AGENT_CONTRACT.md](docs/SHARED_AGENT_CONTRACT.md) and [examples/shared_mapping_agent.py](examples/shared_mapping_agent.py).
 
-```python
-for explanation in result.explanations:
-    print(explanation)
-```
+## What this is not
 
-## What This Does Not Prove
+TamVi Agent Gate is not:
 
-Agent Audit Kit:
+- an agent manager or MainBrain;
+- a sandbox, permission system, or credential vault;
+- a static code scanner or compliance suite;
+- a factual truth oracle;
+- agent identity, memory, personality, or private architecture;
+- an LLM self-critique loop.
 
-- does not prove output is factually true;
-- does not replace sandboxing, IAM, access control, or secret managers;
-- cannot save a credential that has already been committed to git history;
-- only audits according to the checks you configure;
-- does not make a workflow safe if the caller skips preflight or the release gate.
+## Extension points
 
-## For Non-Technical Builders
-
-You can use the idea even before using the code:
-
-1. Treat every AI answer as a candidate.
-2. Check permission before the AI worker runs.
-3. Ask what evidence the worker claims.
-4. Verify that evidence outside the worker.
-5. Scan for secrets before sharing or committing.
-6. Put a release gate between the agent and the real world.
-
-See [docs/NON_TECH_GUIDE.md](docs/NON_TECH_GUIDE.md).
-
-## Feedback
-
-The first public version is intentionally small. If you test it, the most useful feedback is whether the gate feels too strict, too loose, or confusing.
-
-See [docs/FEEDBACK_GUIDE.md](docs/FEEDBACK_GUIDE.md).
-
-## Examples
-
-- [examples/basic_audit.py](examples/basic_audit.py)
-- [examples/nontech_flow.py](examples/nontech_flow.py)
-- [examples/pure_python_agent.py](examples/pure_python_agent.py)
-- [examples/custom_guard.py](examples/custom_guard.py)
-- [examples/async_audit.py](examples/async_audit.py)
-- [examples/langchain_style_wrapper.py](examples/langchain_style_wrapper.py)
-
-## Roadmap
-
-Agent Audit Kit should stay lightweight. Useful next additions may include optional adapters for popular agent frameworks, stronger optional secret scanning, and richer human-review queues. Those should be optional layers, not required dependencies.
-
-## Public Boundary
-
-This repo intentionally shares only the generic audit pattern. It does not include private project architecture, credentials, prompts, memory, or logs.
-
-See [docs/PUBLIC_BOUNDARY.md](docs/PUBLIC_BOUNDARY.md).
+- Custom guards: [docs/EXTENDING.md](docs/EXTENDING.md)
+- Public boundary: [docs/PUBLIC_BOUNDARY.md](docs/PUBLIC_BOUNDARY.md)
+- Security reporting: [SECURITY.md](SECURITY.md)
+- Non-technical mental model: [docs/NON_TECH_GUIDE.md](docs/NON_TECH_GUIDE.md)
 
 ## Status
 
-This is an early public kit. The goal is feedback from builders, non-technical operators, vibe coders, and agent developers who want safer AI workflows without needing a full platform.
+Version `0.2.0` implements shared contract `1.0`. Keep agent-specific policies and adapters in the consuming agent repositories.
 
 ## License
 

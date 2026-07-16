@@ -249,7 +249,7 @@ def test_custom_guard_can_mark_output_for_review():
     assert any(finding.kind == "overconfident_completion_claim" for finding in result.findings)
 
 
-def test_config_can_disable_verified_evidence_requirement_for_lightweight_use():
+def test_disabling_verified_evidence_cannot_grant_release_eligibility():
     result = audit_candidate(
         CandidateOutput(
             content="Draft only, verified evidence disabled.",
@@ -258,7 +258,12 @@ def test_config_can_disable_verified_evidence_requirement_for_lightweight_use():
         config=AuditConfig(require_verified_evidence=False),
     )
 
-    assert result.status == "approved_candidate"
+    assert result.status == "needs_review"
+    assert not result.eligible_for_release
+    assert any(
+        finding.kind == "verification_requirement_disabled"
+        for finding in result.findings
+    )
 
 
 def test_review_callback_receives_non_passing_result():

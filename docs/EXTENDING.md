@@ -1,6 +1,6 @@
-# Extending Agent Audit Kit
+# Extending TamVi Agent Gate
 
-Agent Audit Kit is intentionally small. The main extension point is a custom guard: a function that receives a `CandidateOutput` and returns one or more `Finding` objects.
+TamVi Agent Gate is intentionally small. The main extension point is a custom guard: a function that receives a `CandidateOutput` and returns one or more `Finding` objects.
 
 ## Custom Guard
 
@@ -79,3 +79,18 @@ result = await run_guarded_task_async(envelope, policy, worker, verifier=verifie
 ```
 
 The async API keeps the same trust-boundary semantics as the sync API.
+
+## Built-in Guards
+
+Dependency-free opt-in guards are available for common structural checks:
+
+```python
+from agent_audit_kit import (
+    forbidden_terms_guard,
+    max_length_guard,
+    require_metadata_fields_guard,
+    require_sources_guard,
+)
+```
+
+These guards do not verify factual truth. Keep domain verification outside the worker and attach its inspectable evidence through the caller-controlled verifier path.
