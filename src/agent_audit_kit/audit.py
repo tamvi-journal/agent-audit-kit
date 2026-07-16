@@ -57,6 +57,8 @@ def audit_candidate(
     active_policy = policy or active_config.policy
     active_guards = (*active_config.custom_guards, *custom_guards)
 
+    if active_policy is not None and envelope is None:
+        raise ValueError("policy requires envelope for audit")
     if envelope is not None and active_policy is not None:
         findings.extend(preflight_check(envelope, active_policy))
 

@@ -46,7 +46,7 @@ Identity fields (`worker_id`, `worker`, `agent_id`) must be nonblank strings. If
 
 Sensitive capability flags must be booleans. A true flag requires explicit policy permission; completion authority is blocked by default.
 
-Policy mappings are parsed strictly. Action/tool collections must contain only nonblank strings and capability permissions must be booleans. Malformed policy data is invalid input; it never falls back to a looser policy.
+Policy mappings are parsed strictly. Action/tool collections must contain only nonblank strings and capability permissions must be booleans. Malformed policy data is invalid input; it never falls back to a looser policy. Every audit API rejects a policy when no envelope is available to evaluate it.
 
 ## 4. Candidate packet
 

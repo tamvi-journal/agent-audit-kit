@@ -313,3 +313,21 @@ def test_conflicting_envelope_identity_fields_are_not_release_eligible():
         finding.kind == "invalid_worker_identity"
         for finding in result.findings
     )
+
+
+def test_adapter_rejects_policy_without_envelope():
+    with pytest.raises(ValueError, match="policy requires envelope"):
+        audit_agent_packet(
+            mapping_candidate(),
+            verified_evidence=VERIFIED_ALIASES,
+            policy=allowed_policy(),
+        )
+
+
+def test_config_policy_cannot_be_ignored_without_envelope():
+    with pytest.raises(ValueError, match="policy requires envelope"):
+        audit_candidate(
+            mapping_candidate(),
+            verified_evidence=VERIFIED_ALIASES,
+            config=AuditConfig(policy=allowed_policy()),
+        )
