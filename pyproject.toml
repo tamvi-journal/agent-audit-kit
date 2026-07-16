@@ -41,8 +41,8 @@ tamvi-agent-gate = "agent_audit_kit.cli:main"
 dev = ["pytest>=8"]
 
 [project.urls]
-Repository = "https://github.com/tamvi-journal/agent-audit-kit"
-Issues = "https://github.com/tamvi-journal/agent-audit-kit/issues"
+Repository = "https://github.com/tamvi-journal/tamvi-agent-gate"
+Issues = "https://github.com/tamvi-journal/tamvi-agent-gate/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agent_audit_kit"]

@@ -230,3 +230,37 @@ def test_forbidden_terms_guard_treats_string_as_one_term():
 
     assert finding is not None
     assert finding.details["matches"] == ["internal only"]
+
+
+def test_cli_audit_rejects_policy_without_envelope(tmp_path, capsys):
+    candidate = tmp_path / "candidate.json"
+    policy = tmp_path / "policy.json"
+    candidate.write_text(
+        json.dumps(
+            {
+                "content": "Candidate.",
+                "sources": ["worker"],
+                "checks_run": ["claimed"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    policy.write_text(
+        json.dumps({"allowed_tools": ["filesystem_read"]}),
+        encoding="utf-8",
+    )
+
+    exit_code = main(
+        [
+            "audit",
+            "--candidate",
+            str(candidate),
+            "--policy",
+            str(policy),
+        ]
+    )
+    payload = json.loads(capsys.readouterr().err)
+
+    assert exit_code == EXIT_INVALID_INPUT
+    assert payload["status"] == "invalid_input"
+    assert payload["error"] == "--policy requires --envelope for audit"

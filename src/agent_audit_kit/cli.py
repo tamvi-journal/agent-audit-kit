@@ -87,6 +87,9 @@ def main(argv: list[str] | None = None) -> int:
             _write_json(result.to_dict())
             return _status_exit(result.status)
 
+        if args.policy and not args.envelope:
+            raise ValueError("--policy requires --envelope for audit")
+
         candidate = _load_mapping(args.candidate)
         verified = _load_mapping(args.verified) if args.verified else None
         envelope = _load_mapping(args.envelope) if args.envelope else None

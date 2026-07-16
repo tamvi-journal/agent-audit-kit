@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/agent-audit-kit-hero.svg" alt="TamVi Agent Gate pipeline: task passes through preflight, worker execution, guard, evidence verification, and release gate." width="100%">
+  <img src="assets/tamvi-agent-gate-hero.svg" alt="TamVi Agent Gate pipeline: task passes through preflight, worker execution, guard, evidence verification, and release gate." width="100%">
 </p>
 
 # TamVi Agent Gate
@@ -98,6 +98,8 @@ tamvi-agent-gate audit \
   --envelope envelope.json \
   --policy policy.json
 ```
+
+For `audit`, `--policy` requires `--envelope`; the CLI rejects a policy it cannot evaluate.
 
 | Exit | Meaning |
 |---:|---|
