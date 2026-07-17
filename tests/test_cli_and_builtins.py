@@ -2,6 +2,7 @@ import json
 
 from agent_audit_kit import (
     CandidateOutput,
+    audit_candidate,
     forbidden_terms_guard,
     max_length_guard,
     require_metadata_fields_guard,
@@ -35,6 +36,34 @@ def test_builtin_guards_are_opt_in_and_explainable():
         "required_sources_missing",
         "required_metadata_missing",
     }
+
+
+def test_extended_secret_formats_block_and_redact():
+    cases = (
+        ("aws_access_key_id", "AK" + "IA" + "ABCDEFGHIJKLMNOP"),
+        ("slack_token", "xo" + "xb-" + "1234567890ABCDEF-"),
+        ("google_api_key", "AI" + "za" + "A" * 34 + "_"),
+        ("jwt", "ey" + "Jheader.payloadpart.signaturepart_"),
+    )
+    verified = {
+        "sources": ["unit-test"],
+        "checks_run": ["secret-scan"],
+        "artifacts": ["artifacts/secret-scan.log"],
+        "verifier": "unit-test",
+    }
+
+    for expected_kind, synthetic_secret in cases:
+        result = audit_candidate(
+            CandidateOutput(
+                content="value=" + synthetic_secret,
+                evidence={"sources": ["unit-test"], "checks_run": ["secret-scan"]},
+            ),
+            verified_evidence=verified,
+        )
+
+        assert result.status == "blocked_candidate"
+        assert any(finding.kind == expected_kind for finding in result.findings)
+        assert synthetic_secret not in result.output.content
 
 
 def test_cli_preflight_emits_versioned_json(tmp_path, capsys):

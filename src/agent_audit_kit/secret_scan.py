@@ -18,6 +18,31 @@ SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str], str], ...] = (
         "[REDACTED_GITHUB_TOKEN]",
     ),
     (
+        "aws_access_key_id",
+        re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b"),
+        "[REDACTED_AWS_ACCESS_KEY_ID]",
+    ),
+    (
+        "slack_token",
+        re.compile(
+            r"(?<![A-Za-z0-9-])xox(?:a|b|c|e|o|p|r|s)-[A-Za-z0-9-]{10,}(?![A-Za-z0-9-])"
+        ),
+        "[REDACTED_SLACK_TOKEN]",
+    ),
+    (
+        "google_api_key",
+        re.compile(r"(?<![0-9A-Za-z_-])AIza[0-9A-Za-z_-]{35}(?![0-9A-Za-z_-])"),
+        "[REDACTED_GOOGLE_API_KEY]",
+    ),
+    (
+        "jwt",
+        re.compile(
+            r"(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\."
+            r"[A-Za-z0-9_-]{5,}(?![A-Za-z0-9_-])"
+        ),
+        "[REDACTED_JWT]",
+    ),
+    (
         "bearer_token",
         re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]{24,}\b", re.IGNORECASE),
         "Bearer [REDACTED_TOKEN]",

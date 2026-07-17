@@ -20,6 +20,7 @@ from agent_audit_kit.gate import GateDecision, gate_candidate
 from agent_audit_kit.guard import guard_candidate_output
 from agent_audit_kit.models import (
     CONTRACT_VERSION,
+    ArtifactResolver,
     AuditConfig,
     AuditResult,
     CandidateOutput,
@@ -32,11 +33,12 @@ from agent_audit_kit.preflight import preflight_check, preflight_task
 from agent_audit_kit.secret_scan import redact_text, scan_text
 
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 
 __all__ = [
     "CONTRACT_VERSION",
+    "ArtifactResolver",
     "AuditConfig",
     "AuditResult",
     "CandidateOutput",

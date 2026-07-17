@@ -91,6 +91,7 @@ def audit_candidate(
             require_verified=active_config.require_verified_evidence,
             worker_identity=worker_identity,
             identity_mismatch=identity_mismatch,
+            artifact_resolver=active_config.artifact_resolver,
         )
     )
 

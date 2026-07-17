@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from agent_audit_kit.models import Finding
+from agent_audit_kit.models import ArtifactResolver, Finding
 
 
 INSPECTABLE_ARTIFACT_FIELDS = (
@@ -136,6 +136,7 @@ def verify_evidence_packet(
     require_verified: bool = True,
     worker_identity: str | None = None,
     identity_mismatch: bool = False,
+    artifact_resolver: ArtifactResolver | None = None,
 ) -> tuple[Finding, ...]:
     """Check claimed evidence separately from independently verified evidence."""
 
@@ -200,6 +201,8 @@ def verify_evidence_packet(
                 "Verified evidence needs a verifier identity controlled outside the worker.",
             )
         )
+    if artifact_resolver is not None and verified.artifacts:
+        findings.extend(_resolve_verified_artifacts(verified.artifacts, artifact_resolver))
     if worker_identity and verified.verifier and verified.verifier == worker_identity:
         findings.append(
             Finding(
@@ -208,4 +211,44 @@ def verify_evidence_packet(
             )
         )
 
+    return tuple(findings)
+
+
+def _resolve_verified_artifacts(
+    artifacts: tuple[str, ...],
+    resolver: ArtifactResolver,
+) -> tuple[Finding, ...]:
+    findings: list[Finding] = []
+    for locator in artifacts:
+        try:
+            resolved = resolver(locator)
+        except Exception:
+            findings.append(
+                Finding(
+                    "artifact_resolver_error",
+                    "The caller-provided artifact resolver failed; verified evidence cannot be released automatically.",
+                    source="evidence.artifact_resolver",
+                    details={"locator": locator},
+                )
+            )
+            continue
+
+        if not isinstance(resolved, bool):
+            findings.append(
+                Finding(
+                    "artifact_resolver_invalid_result",
+                    "The artifact resolver must return a boolean for every verified artifact locator.",
+                    source="evidence.artifact_resolver",
+                    details={"locator": locator},
+                )
+            )
+        elif not resolved:
+            findings.append(
+                Finding(
+                    "verifier_artifact_unresolved",
+                    "A verified artifact locator could not be resolved by the caller-provided resolver.",
+                    source="evidence.artifact_resolver",
+                    details={"locator": locator},
+                )
+            )
     return tuple(findings)

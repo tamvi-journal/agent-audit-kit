@@ -12,6 +12,9 @@ It includes:
 
 It does not include:
 
+- Runtime sandboxing or capability enforcement.
+- Caller, verifier, or artifact authentication.
+- Audit-log storage, retention, or ledger infrastructure.
 - Private project architecture.
 - Production deployment infrastructure.
 - Any API keys, credentials, prompts, private memory, or internal logs.

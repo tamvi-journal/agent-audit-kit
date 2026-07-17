@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1
+
+- Document the caller/MainBrain trust boundary and runtime enforcement responsibility.
+- Add an optional fail-closed artifact resolver hook for verified evidence locators.
+- Detect and redact AWS access key IDs, Slack tokens, Google API keys, and JWTs.
+- Document external audit-record persistence without coupling the kernel to a database.
+
 ## 0.2.0
 
 - Add shared contract version `1.0` and versioned result serialization.
