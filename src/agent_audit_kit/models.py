@@ -170,6 +170,7 @@ class CandidateOutput:
 
 CustomGuard = Callable[[CandidateOutput], Finding | Iterable[Finding] | None]
 EvidenceVerifier = Callable[[CandidateOutput], Mapping[str, Any] | None]
+ArtifactResolver = Callable[[str], bool]
 
 
 @dataclass(frozen=True)
@@ -276,3 +277,4 @@ class AuditConfig:
     verifier: EvidenceVerifier | None = None
     require_claimed_evidence: bool = True
     require_verified_evidence: bool = True
+    artifact_resolver: ArtifactResolver | None = None

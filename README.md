@@ -26,6 +26,12 @@ trusted envelope -> preflight -> worker -> output guard -> external evidence che
 - Disabling verified evidence can only route to review; it cannot grant release eligibility.
 - Secret scanning is pattern-based and does not replace sandboxing, IAM, secret managers, or repository-history cleanup.
 
+### Enforcement boundary
+
+**TamVi Agent Gate evaluates declarations; it does not enforce capabilities.** Preflight checks the trusted envelope supplied by the caller. The runtime must separately enforce actual network, shell, tool, filesystem, and external-mutation permissions. A worker that declares `network_access: false` but is still given network access cannot be detected or stopped by this kernel.
+
+The caller/MainBrain is the trust root. Verified-evidence packets are structurally validated, but the kernel does not authenticate the caller or verifier. If that trust root is compromised, fabricated envelopes and evidence are outside this gate's protection.
+
 ## Install for development
 
 The distribution name is `tamvi-agent-gate`; the import namespace remains `agent_audit_kit` for compatibility.
@@ -133,6 +139,30 @@ config = AuditConfig(
 
 Domain-specific truth checks should remain outside this kernel and attach verified evidence through the caller-controlled envelope.
 
+## Optional artifact resolution
+
+A caller can require every verified artifact locator to resolve before automatic release:
+
+```python
+from pathlib import Path
+
+from agent_audit_kit import AuditConfig
+
+artifact_root = Path("audit-artifacts").resolve()
+
+def artifact_exists(locator: str) -> bool:
+    candidate = (artifact_root / locator).resolve()
+    return candidate.is_relative_to(artifact_root) and candidate.is_file()
+
+config = AuditConfig(artifact_resolver=artifact_exists)
+```
+
+Resolver exceptions, non-boolean results, and unresolved locators fail closed to `needs_review`. The hook improves artifact reachability checks only; it does not authenticate the verifier, prove artifact integrity, or protect against a compromised caller. Stronger assurance requires a separate trust domain, signed attestations, or an independently controlled verifier.
+
+## Audit-record persistence
+
+The kernel returns versioned records and intentionally does not persist them. See [docs/AUDIT_RECORDS.md](docs/AUDIT_RECORDS.md) for an external JSON Lines/ledger pattern, retention cautions, and sink-failure guidance.
+
 ## Shared-agent integration
 
 Each agent should add only a thin adapter:
@@ -165,7 +195,7 @@ TamVi Agent Gate is not:
 
 ## Status
 
-Version `0.2.0` implements shared contract `1.0`. Keep agent-specific policies and adapters in the consuming agent repositories.
+Version `0.2.1` implements shared contract `1.0`. Keep agent-specific policies and adapters in the consuming agent repositories.
 
 ## License
 

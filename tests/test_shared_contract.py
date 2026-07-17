@@ -315,6 +315,114 @@ def test_conflicting_envelope_identity_fields_are_not_release_eligible():
     )
 
 
+def test_audit_config_keeps_existing_positional_argument_order():
+    config = AuditConfig(None, (), None, False, False)
+
+    assert config.require_claimed_evidence is False
+    assert config.require_verified_evidence is False
+    assert config.artifact_resolver is None
+
+
+def test_artifact_resolver_accepts_reachable_verified_artifact():
+    resolved = []
+
+    def resolver(locator):
+        resolved.append(locator)
+        return True
+
+    result = audit_candidate(
+        mapping_candidate(),
+        verified_evidence=VERIFIED_ALIASES,
+        envelope=allowed_envelope(),
+        config=AuditConfig(artifact_resolver=resolver),
+    )
+
+    assert result.status == "approved_candidate"
+    assert resolved == ["artifacts/pytest.log"]
+
+
+def test_artifact_resolver_rejects_unreachable_verified_artifact():
+    result = audit_candidate(
+        mapping_candidate(),
+        verified_evidence=VERIFIED_ALIASES,
+        envelope=allowed_envelope(),
+        config=AuditConfig(artifact_resolver=lambda _locator: False),
+    )
+
+    assert result.status == "needs_review"
+    assert any(
+        finding.kind == "verifier_artifact_unresolved"
+        for finding in result.findings
+    )
+
+
+def test_artifact_resolver_error_fails_closed_without_leaking_exception():
+    def resolver(_locator):
+        raise RuntimeError("private resolver detail")
+
+    result = audit_candidate(
+        mapping_candidate(),
+        verified_evidence=VERIFIED_ALIASES,
+        envelope=allowed_envelope(),
+        config=AuditConfig(artifact_resolver=resolver),
+    )
+
+    assert result.status == "needs_review"
+    assert any(
+        finding.kind == "artifact_resolver_error"
+        for finding in result.findings
+    )
+    assert "private resolver detail" not in " ".join(result.explanations)
+
+
+def test_artifact_resolver_findings_do_not_persist_raw_locator():
+    sensitive_locator = (
+        "https://artifacts.example/run.log?"
+        "X-Amz-Credential=temporary-credential"
+    )
+    verified = {
+        "sources": ["ci-log"],
+        "checks_run": ["pytest"],
+        "artifacts": [sensitive_locator],
+        "verifier": "mainbrain",
+    }
+
+    def resolver(_locator):
+        raise RuntimeError("resolver failure")
+
+    result = audit_candidate(
+        mapping_candidate(),
+        verified_evidence=verified,
+        envelope=allowed_envelope(),
+        config=AuditConfig(artifact_resolver=resolver),
+    )
+
+    assert result.status == "needs_review"
+    serialized = result.to_dict()
+    resolver_finding = next(
+        finding
+        for finding in serialized["findings"]
+        if finding["kind"] == "artifact_resolver_error"
+    )
+    assert resolver_finding["details"] == {"artifact_index": 0}
+    assert sensitive_locator not in repr(serialized)
+
+
+def test_artifact_resolver_requires_boolean_result():
+    result = audit_candidate(
+        mapping_candidate(),
+        verified_evidence=VERIFIED_ALIASES,
+        envelope=allowed_envelope(),
+        config=AuditConfig(artifact_resolver=lambda _locator: "yes"),
+    )
+
+    assert result.status == "needs_review"
+    assert any(
+        finding.kind == "artifact_resolver_invalid_result"
+        for finding in result.findings
+    )
+
+
 def test_adapter_rejects_policy_without_envelope():
     with pytest.raises(ValueError, match="policy requires envelope"):
         audit_agent_packet(

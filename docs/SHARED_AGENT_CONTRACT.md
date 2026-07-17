@@ -11,7 +11,15 @@ This document defines the generic boundary shared by TamVi agents. It does not d
 - **Verifier** is a different principal controlled outside the worker.
 - **Gate** classifies the candidate under configured checks; it does not prove truth.
 
-## 2. Invocation order
+## 2. Trust and enforcement boundary
+
+The caller/MainBrain is the trust root for the envelope, policy, verified-evidence packet, and final release action. The gate validates the structure and consistency of those inputs; it does not authenticate the caller. A caller that can fabricate verified evidence, or an orchestrator compromised by prompt injection, is outside this kernel's protection.
+
+Preflight evaluates declared intent. It does not observe or restrict what a worker actually does. Runtime sandboxing, capability enforcement, IAM, network controls, and external-action authorization must ensure that worker behavior cannot exceed the envelope.
+
+An optional caller-provided artifact resolver can confirm that verified artifact locators are reachable. Because the caller supplies the resolver, this improves inspectability but does not establish artifact integrity or verifier authenticity. Those guarantees require a separate trust domain, signed attestations, or an independently controlled verification channel.
+
+## 3. Invocation order
 
 ```text
 construct trusted envelope
@@ -25,7 +33,7 @@ construct trusted envelope
 
 Calling `audit_candidate()` retrospectively does not repair a skipped preflight.
 
-## 3. Trusted envelope
+## 4. Trusted envelope
 
 Common fields:
 
@@ -48,7 +56,7 @@ Sensitive capability flags must be booleans. A true flag requires explicit polic
 
 Policy mappings are parsed strictly. Action/tool collections must contain only nonblank strings and capability permissions must be booleans. Malformed policy data is invalid input; it never falls back to a looser policy. Every audit API rejects a policy when no envelope is available to evaluate it.
 
-## 4. Candidate packet
+## 5. Candidate packet
 
 Canonical shape:
 
@@ -71,7 +79,7 @@ Mapping adapters also accept top-level `output`, `text`, or `summary`; top-level
 
 Exactly one supported content field is selected by priority and it must be a string. Blank content is not release eligible. Candidate evidence is always claimed evidence.
 
-## 5. Verified evidence
+## 6. Verified evidence
 
 Canonical shape:
 
@@ -93,9 +101,11 @@ Artifact entries may be:
 
 Containers, booleans, numbers, `null`, blank strings, empty mappings, and metadata-only mappings do not count as inspectable artifacts.
 
+When `AuditConfig.artifact_resolver` is configured, every normalized verified-artifact locator is passed to that synchronous caller-owned hook. A locator is accepted only when the hook returns the boolean `True`. Exceptions, non-boolean results, and `False` results create actionable findings and route the candidate to review. The resolver checks reachability only and is not a signature or authentication mechanism.
+
 Verifier identity must be a nonblank string. A worker cannot verify itself. If trusted envelope identity and candidate identity disagree, the candidate is not release eligible.
 
-## 6. Stable statuses
+## 7. Stable statuses
 
 | Stage | Statuses |
 |---|---|
@@ -104,7 +114,7 @@ Verifier identity must be a nonblank string. A worker cannot verify itself. If t
 
 `approved_candidate` means eligible under configured checks, not proven true and not automatically executed.
 
-## 7. Versioned records
+## 8. Versioned records
 
 `Finding`, `PreflightResult`, `AuditResult`, and `GuardedTaskResult` expose `to_dict()`. Records contain `contract_version: "1.0"`.
 
@@ -115,7 +125,9 @@ Consumers must:
 - keep top-level release status authoritative;
 - avoid treating logs or observability records as approval.
 
-## 8. Agent adapter rule
+The kernel does not persist these records. Callers may write `to_dict()` output to an external append-only ledger or audit sink, subject to their own access control, retention, redaction, and sink-failure policy. Persistence success must never upgrade the release status.
+
+## 9. Agent adapter rule
 
 Keep the adapter inside each consuming agent repository. The shared kernel must not import agent-specific prompts, memory, skills, credentials, private paths, or identity rules.
 
@@ -126,7 +138,7 @@ Recommended rollout:
 3. Enable preflight and audit enforcement.
 4. Remove duplicated local gate code only after parity is verified.
 
-## 9. Anti-patterns
+## 10. Anti-patterns
 
 - Worker supplies both candidate and verified evidence.
 - Worker metadata overrides the trusted envelope.
@@ -135,3 +147,5 @@ Recommended rollout:
 - Audit output directly triggers external mutation.
 - `allow-unverified` is treated as release permission.
 - Agent-specific domain logic is added to the shared kernel.
+- A caller-provided resolver is treated as proof that the caller or verifier is authentic.
+- A successful preflight declaration is treated as runtime capability enforcement.
