@@ -275,6 +275,6 @@ class AuditConfig:
     policy: PreflightPolicy | None = None
     custom_guards: tuple[CustomGuard, ...] = ()
     verifier: EvidenceVerifier | None = None
-    artifact_resolver: ArtifactResolver | None = None
     require_claimed_evidence: bool = True
     require_verified_evidence: bool = True
+    artifact_resolver: ArtifactResolver | None = None

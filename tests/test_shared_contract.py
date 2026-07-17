@@ -315,6 +315,14 @@ def test_conflicting_envelope_identity_fields_are_not_release_eligible():
     )
 
 
+def test_audit_config_keeps_existing_positional_argument_order():
+    config = AuditConfig(None, (), None, False, False)
+
+    assert config.require_claimed_evidence is False
+    assert config.require_verified_evidence is False
+    assert config.artifact_resolver is None
+
+
 def test_artifact_resolver_accepts_reachable_verified_artifact():
     resolved = []
 
