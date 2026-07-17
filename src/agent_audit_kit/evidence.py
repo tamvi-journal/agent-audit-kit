@@ -219,7 +219,8 @@ def _resolve_verified_artifacts(
     resolver: ArtifactResolver,
 ) -> tuple[Finding, ...]:
     findings: list[Finding] = []
-    for locator in artifacts:
+    for artifact_index, locator in enumerate(artifacts):
+        safe_details = {"artifact_index": artifact_index}
         try:
             resolved = resolver(locator)
         except Exception:
@@ -228,7 +229,7 @@ def _resolve_verified_artifacts(
                     "artifact_resolver_error",
                     "The caller-provided artifact resolver failed; verified evidence cannot be released automatically.",
                     source="evidence.artifact_resolver",
-                    details={"locator": locator},
+                    details=safe_details,
                 )
             )
             continue
@@ -239,7 +240,7 @@ def _resolve_verified_artifacts(
                     "artifact_resolver_invalid_result",
                     "The artifact resolver must return a boolean for every verified artifact locator.",
                     source="evidence.artifact_resolver",
-                    details={"locator": locator},
+                    details=safe_details,
                 )
             )
         elif not resolved:
@@ -248,7 +249,7 @@ def _resolve_verified_artifacts(
                     "verifier_artifact_unresolved",
                     "A verified artifact locator could not be resolved by the caller-provided resolver.",
                     source="evidence.artifact_resolver",
-                    details={"locator": locator},
+                    details=safe_details,
                 )
             )
     return tuple(findings)

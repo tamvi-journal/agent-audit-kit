@@ -375,6 +375,39 @@ def test_artifact_resolver_error_fails_closed_without_leaking_exception():
     assert "private resolver detail" not in " ".join(result.explanations)
 
 
+def test_artifact_resolver_findings_do_not_persist_raw_locator():
+    sensitive_locator = (
+        "https://artifacts.example/run.log?"
+        "X-Amz-Credential=temporary-credential"
+    )
+    verified = {
+        "sources": ["ci-log"],
+        "checks_run": ["pytest"],
+        "artifacts": [sensitive_locator],
+        "verifier": "mainbrain",
+    }
+
+    def resolver(_locator):
+        raise RuntimeError("resolver failure")
+
+    result = audit_candidate(
+        mapping_candidate(),
+        verified_evidence=verified,
+        envelope=allowed_envelope(),
+        config=AuditConfig(artifact_resolver=resolver),
+    )
+
+    assert result.status == "needs_review"
+    serialized = result.to_dict()
+    resolver_finding = next(
+        finding
+        for finding in serialized["findings"]
+        if finding["kind"] == "artifact_resolver_error"
+    )
+    assert resolver_finding["details"] == {"artifact_index": 0}
+    assert sensitive_locator not in repr(serialized)
+
+
 def test_artifact_resolver_requires_boolean_result():
     result = audit_candidate(
         mapping_candidate(),
